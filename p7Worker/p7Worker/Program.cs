@@ -1,15 +1,16 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-namespace p7_worker;
+namespace p7Worker;
 
 internal class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         // Change these values to suit your needs
         string container = "magnustest1";
@@ -77,3 +78,4 @@ internal class Program
             Log.CloseAndFlush();
         }
     }
+}

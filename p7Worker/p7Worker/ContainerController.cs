@@ -6,20 +6,14 @@ using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-namespace P7;
+namespace p7Worker;
 
 public class ContainerController
 {
-    #region Variables
-
     DockerClient client = new DockerClientConfiguration(
             new Uri("unix:///var/run/docker.sock")).CreateClient();
 
     string PathToContainers = $@"/var/lib/docker/containers/";
-
-    #endregion Variables
-
-    #region Methods
 
     public async Task CreateImageAsync(string imageName)
     {
@@ -234,6 +228,4 @@ public class ContainerController
 
         return false;
     }
-
-    #endregion Methods
 }

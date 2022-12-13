@@ -6,18 +6,13 @@ using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-namespace P7;
+namespace p7Worker;
 
 public class FileOperations
 {
-    #region Variables
 
     string pathToContainers = $@"/var/lib/docker/containers";
     string pathToHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-    #endregion Variables
-
-    #region Methods
 
     public void MovePayloadIntoContainer(string payloadName, string containerID)
     {
@@ -115,6 +110,4 @@ public class FileOperations
 
         System.IO.File.Copy(sourceFile, destFile, true);
     }
-
-    #endregion Methods
 }
