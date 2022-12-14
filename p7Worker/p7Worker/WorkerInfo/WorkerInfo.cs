@@ -11,7 +11,7 @@ namespace p7Worker.WorkerInfo
     {
         public static string GetWorkerId()
         {
-            using StreamReader r = new("config.json");
+            using StreamReader r = new("WorkerInfo.json");
             string json = r.ReadToEnd();
             WorkerInfoJson? info = JsonSerializer.Deserialize<WorkerInfoJson>(json);
             return info.WorkerId;
@@ -19,7 +19,7 @@ namespace p7Worker.WorkerInfo
 
         public static string GetServerName()
         {
-            using StreamReader r = new("config.json");
+            using StreamReader r = new("WorkerInfo.json");
             string json = r.ReadToEnd();
             WorkerInfoJson? info = JsonSerializer.Deserialize<WorkerInfoJson>(json);
             return info.ServerName;

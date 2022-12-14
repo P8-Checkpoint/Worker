@@ -28,7 +28,7 @@ namespace p7Worker
             _channel = connection.CreateModel();
         }
 
-        void Register()
+        public void Register()
         {
             var replyQueueName = _channel.QueueDeclare(autoDelete: true, exclusive: true).QueueName;
 
@@ -64,14 +64,14 @@ namespace p7Worker
             props.ReplyTo = replyQueueName;
 
             var workerId = WorkerInfo.WorkerInfo.GetWorkerId();
-            var messageBytes = Encoding.UTF8.GetBytes(workerId);
+            var messageBytes = Encoding.UTF8.GetBytes($"{workerId}");
 
             _channel.BasicPublish(exchange: "server", routingKey: "workerRegister", basicProperties: props, body: messageBytes);
 
             Console.WriteLine("Registration sent to server");
         }
 
-        void Connect()
+        public void Connect()
         {
             var messageBytes = Encoding.UTF8.GetBytes(WorkerInfo.WorkerInfo.GetWorkerId());
             _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.WorkerInfo.GetServerName()}.workerConnect", body: messageBytes);
