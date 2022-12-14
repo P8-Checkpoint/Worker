@@ -24,5 +24,12 @@ namespace p7Worker.WorkerInfo
             WorkerInfoJson? info = JsonSerializer.Deserialize<WorkerInfoJson>(json);
             return info.ServerName;
         }
+
+        public static void SetWorkerInfo(WorkerInfoJson workerInfo)
+        {
+            string fileName = "WorkerInfo.json";
+            string jsonString = JsonSerializer.Serialize(workerInfo);
+            File.WriteAllText(fileName, jsonString);
+        }
     }
 }
