@@ -27,7 +27,7 @@ public class Worker
     string _payloadName;
     string _checkpointName;
     string _storageDirectory;
-
+    int _responseFrequency;
 
     public Worker()
     {
@@ -37,10 +37,11 @@ public class Worker
     void Init()
     {
         _container = "WorkerImage";
-        _image = "Benchmark";
+        _image = "python:3.10-alpine";
         _payloadName = "payload.py";
         _checkpointName = "checkpoint";
         _storageDirectory = "p7";
+        _responseFrequency = 20;
         WorkerInfo.WorkerId = Guid.NewGuid().ToString();
         _handler = new RabbitMQHandler();
         _containerController = new ContainerController();
@@ -83,6 +84,34 @@ public class Worker
         Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
     }
 
+    public async Task RecoverAndExecuteContainerAsync()
+    {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Console()
+            .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
+            .CreateLogger();
+
+        Console.WriteLine("Starting Program...");
+        Log.Information($"Hello, {Environment.UserName}!");
+
+        // Log total elapsed time per run
+        var totalTime = Stopwatch.StartNew();
+
+        // Create a container
+        _containerController.CreateContainerAsync(_container, _image).RunSynchronously();
+
+        // Move checkpoint into container and start
+        string checkpointID = _containerController.GetContainerIDByNameAsync(_container).Result;
+        _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
+        _containerController.StartAsync(checkpointID).RunSynchronously();
+
+        await _containerController.DeleteContainerAsync(checkpointID);
+
+        totalTime.Stop();
+        Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
+    }
+
     void WorkerConsumer(object? model, BasicDeliverEventArgs ea)
     {
         var body = ea.Body.ToArray();
@@ -101,28 +130,40 @@ public class Worker
                 Downloadftpfile(startJobInfo.FTPLink, downloadStartName);
                 File.Move($"{downloadStartName}/{_image}", $"/var/lib/docker/images/{_image}");
 
-                _handler.SendMessage($"{WorkerInfo.WorkerId} is done with job!", startProps);
+                _handler.SendMessage($"{WorkerInfo.WorkerId} has downloaded job and is starting on {startJobInfo.JobId}!", startProps);
+
+                PeriodicStillUpResponse(TimeSpan.FromSeconds(_responseFrequency), () =>
+                {
+                    _handler.SendMessage($"{WorkerInfo.WorkerId} is still working on {startJobInfo.JobId}!", startProps);
+                }, async () =>
+                {
+                    await CreateAndExecuteContainerAsync();
+                }).Wait();
+
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is done with {startJobInfo.JobId}!", startProps);
                 break;
 
             case "recoverJob":
                 var recoverProps = _handler.GetBasicProperties("type");
                 _handler.SendMessage($"{WorkerInfo.WorkerId} is recovering job!", recoverProps);
 
-                var recoverJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
+                var recoverJobInfo = JsonSerializer.Deserialize<JobRecoverDTO>(message);
                 string downloadRecoverName = "workerDownload";
                 Downloadftpfile(recoverJobInfo.FTPLink, downloadRecoverName);
                 File.Move($@"/{_storageDirectory}/{downloadRecoverName}/{_image}", $"/var/lib/docker/images/{_image}");
                 File.Move($@"/{_storageDirectory}/{downloadRecoverName}/", $"/var/lib/docker/images/{_image}");
 
-                // Create a container
-                _containerController.CreateContainerAsync(_container, _image).RunSynchronously();
+                _handler.SendMessage($"{WorkerInfo.WorkerId} has downloaded job and is starting on {recoverJobInfo.JobId}!", recoverProps);
 
-                // Move checkpoint into container and start
-                string checkpointID = _containerController.GetContainerIDByNameAsync(_container).Result;
-                _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
-                _containerController.StartAsync(checkpointID).RunSynchronously();
+                PeriodicStillUpResponse(TimeSpan.FromSeconds(_responseFrequency), () =>
+                {
+                    _handler.SendMessage($"{WorkerInfo.WorkerId} is still working on {recoverJobInfo.JobId}", recoverProps);
+                }, async () =>
+                {
+                    await RecoverAndExecuteContainerAsync();
+                }).Wait();
 
-                _handler.SendMessage($"{WorkerInfo.WorkerId} is done", recoverProps);
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is done with {recoverJobInfo.JobId}", recoverProps);
                 break;
 
             case "stopJob":
@@ -166,5 +207,15 @@ public class Worker
         }
 
         File.Move($"{downloadName}", $"/{_storageDirectory}/storage");
+    }
+
+    async Task PeriodicStillUpResponse(TimeSpan timeSpan, Action action, Action response)
+    {
+        var periodicTimer = new PeriodicTimer(timeSpan);
+        while (await periodicTimer.WaitForNextTickAsync())
+        {
+            response();
+            action();
+        }
     }
 }
