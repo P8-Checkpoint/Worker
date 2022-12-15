@@ -31,12 +31,12 @@ public class FileOperations
 
     public void ExtractResultFromContainer(string resultName, string containerID)
     {
-        string resultDestination = System.IO.Path.Combine(pathToHome, resultName);
+        string resultDestination = System.IO.Path.Combine(pathToHome, "result");
 
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"cp {containerID}:./{resultName} {resultDestination}";
+            process.StartInfo.Arguments = $"cp {containerID}:./*.worker {resultDestination}";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -91,6 +91,7 @@ public class FileOperations
 
     public void MoveCheckpointIntoContainer(string checkpoint, string containerID)
     {
+        string pathToRecoveryCheckpoint = $@"{pathToHome}/storage/{checkpoint}";
         string pathToCheckpoints = $@"/{pathToContainers}/{containerID}/checkpoints";
 
         using (Process process = new Process())

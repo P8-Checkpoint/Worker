@@ -25,6 +25,7 @@ public class Worker
     string _container;
     string _image;
     string _payloadName;
+    string _checkpointName;
     string _storageDirectory;
 
 
@@ -38,6 +39,8 @@ public class Worker
         _container = "WorkerImage";
         _image = "Benchmark";
         _payloadName = "payload.py";
+        _checkpointName = "checkpoint";
+        _storageDirectory = "p7";
         WorkerInfo.WorkerId = Guid.NewGuid().ToString();
         _handler = new RabbitMQHandler();
         _containerController = new ContainerController();
@@ -49,7 +52,8 @@ public class Worker
     {
         _handler.Register(RegisterResponseRecieved);
         Thread.Sleep(100);
-        _handler.SendMessage($"{WorkerInfo.WorkerId} is active and ready to recieve work1");
+        var props = _handler.GetBasicProperties("type");
+        _handler.SendMessage($"{WorkerInfo.WorkerId} is active and ready to recieve work!", props);
     }
 
     public async Task CreateAndExecuteContainerAsync()
@@ -72,21 +76,11 @@ public class Worker
         // Start Container
         string containerID = await _containerController.GetContainerIDByNameAsync(_container);
         await _containerController.StartAsync(containerID);
-        // sudo docker start -a f74a2f3f24c99857de4a91fa8deb56d16b8e640052ba16f19d7e025f30be3746
-
-        // Execute payload
-        // cc.Execute(containerID, payloadName, 500);
-        _containerController.ExecuteWithoutCheckpointing(containerID, _payloadName);
-
-        // Extract all checkpoint files
-        // fileOperations.MoveAllCheckpointsFromContainer(containerID);
-        // sudo docker cp 595fe85ccd872649b4dc64a7af3dfa2562fcceef1a8c1aa285b283ba3e7e8f31:/worker.result./ worker.result
 
         await _containerController.DeleteContainerAsync(containerID);
 
         totalTime.Stop();
         Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
-        // Log.Logger.Information($"Elapsed total time for run {i} with payload {payloadName}: {totalTime.ElapsedMilliseconds}ms");
     }
 
     void WorkerConsumer(object? model, BasicDeliverEventArgs ea)
@@ -96,23 +90,46 @@ public class Worker
 
         if (!ea.BasicProperties.Headers.ContainsKey("type"))
             return;
-
         switch (Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]))
         {
             case "startJob":
-                var startJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
+                var startProps = _handler.GetBasicProperties("type");
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is starting job!", startProps);
 
+                var startJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
+                string downloadStartName = "workerDownload";
+                Downloadftpfile(startJobInfo.FTPLink, downloadStartName);
+                File.Move($"{downloadStartName}/{_image}", $"/var/lib/docker/images/{_image}");
+
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is done with job!", startProps);
                 break;
 
             case "recoverJob":
-                var recoverJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
+                var recoverProps = _handler.GetBasicProperties("type");
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is recovering job!", recoverProps);
 
+                var recoverJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
+                string downloadRecoverName = "workerDownload";
+                Downloadftpfile(recoverJobInfo.FTPLink, downloadRecoverName);
+                File.Move($@"/{_storageDirectory}/{downloadRecoverName}/{_image}", $"/var/lib/docker/images/{_image}");
+                File.Move($@"/{_storageDirectory}/{downloadRecoverName}/", $"/var/lib/docker/images/{_image}");
+
+                // Create a container
+                _containerController.CreateContainerAsync(_container, _image).RunSynchronously();
+
+                // Move checkpoint into container and start
+                string checkpointID = _containerController.GetContainerIDByNameAsync(_container).Result;
+                _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
+                _containerController.StartAsync(checkpointID).RunSynchronously();
+
+                _handler.SendMessage($"{WorkerInfo.WorkerId} is done", recoverProps);
                 break;
-            case "type3":
-                break;
-            case "type4":
-                break;
-            case "type5":
+
+            case "stopJob":
+                string containerID = _containerController.GetContainerIDByNameAsync(_container).Result;
+                _containerController.StopContainer(containerID).Wait();
+                var stopProps = _handler.GetBasicProperties("type");
+                _handler.SendMessage($"{WorkerInfo.WorkerId} stopped working.", stopProps);
                 break;
 
             default:
@@ -133,24 +150,21 @@ public class Worker
         _handler.AddWorkerConsumer(WorkerConsumer);
     }
 
-    void Downloadftpfile(string ftpLink)
+    void Downloadftpfile(string ftpLink, string downloadName)
     {
-        string downloadname = "workerdownload";
-        string imagename = "workerimage";
-
         using (WebClient request = new WebClient())
         {
             //request.Credentials = new NetworkCredential("p1user", "1234");
             byte[] filedata = request.DownloadData(ftpLink);
 
-            using (FileStream file = File.Create(downloadname))
+            using (FileStream file = File.Create(downloadName))
             {
                 file.Write(filedata, 0, filedata.Length);
                 file.Close();
             }
-            Console.WriteLine("download complete");
+            Console.WriteLine("Download Complete!");
         }
 
-        File.Move($"{downloadname}/{imagename}", $"/var/lib/docker/images/{imagename}");
+        File.Move($"{downloadName}", $"/{_storageDirectory}/storage");
     }
 }
