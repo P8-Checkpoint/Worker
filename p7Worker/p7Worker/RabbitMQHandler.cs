@@ -7,7 +7,6 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using p7Worker.WorkerInfo;
 
 namespace p7Worker;
 
@@ -16,11 +15,9 @@ public class RabbitMQHandler
     IModel _channel;
     string _replyConsumerTag;
     string _workerQueueName;
-    Guid _workerId;
 
-    public RabbitMQHandler(Guid workerId)
+    public RabbitMQHandler()
     {
-        _workerId = workerId;
         Init();
     }
 
@@ -47,10 +44,10 @@ public class RabbitMQHandler
             if (ea.BasicProperties.CorrelationId == correlationId)
             {
                 RegisterResponseDTO? workerInfoJson = JsonSerializer.Deserialize<RegisterResponseDTO>(response);
-                WorkerInfo.WorkerInfo.SetWorkerInfo(workerInfoJson);
+                //WorkerInfo.WorkerInfo.SetWorkerInfo(workerInfoJson);
 
-                _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerInfo.GetWorkerId(), autoDelete: false, exclusive: false);
-                _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerInfo.GetWorkerId());
+                _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerId, autoDelete: false, exclusive: false);
+                _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerId);
 
                 Connect();
             }
@@ -70,7 +67,7 @@ public class RabbitMQHandler
         props.CorrelationId = correlationId;
         props.ReplyTo = replyQueueName;
 
-        var workerId = WorkerInfo.WorkerInfo.GetWorkerId();
+        var workerId = WorkerInfo.WorkerId;
         var messageBytes = Encoding.UTF8.GetBytes($"{workerId}");
 
         _channel.BasicPublish(exchange: "server", routingKey: "workerRegister", basicProperties: props, body: messageBytes);
@@ -80,8 +77,8 @@ public class RabbitMQHandler
 
     public void Connect()
     {
-        var messageBytes = Encoding.UTF8.GetBytes(WorkerInfo.WorkerInfo.GetWorkerId());
-        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.WorkerInfo.GetServerName()}.workerConnect", body: messageBytes);
+        var messageBytes = Encoding.UTF8.GetBytes(WorkerInfo.WorkerId);
+        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.workerConnect", body: messageBytes);
         Console.WriteLine("Connected to server {}. You can now freely send messages!");
         _channel.BasicCancel(_replyConsumerTag);
     }
@@ -101,7 +98,7 @@ public class RabbitMQHandler
     public void SendMessage(string message)
     {
         var messageBytes = Encoding.UTF8.GetBytes(message);
-        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.WorkerInfo.GetServerName()}.{WorkerInfo.WorkerInfo.GetWorkerId()}", body: messageBytes);
+        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.{WorkerInfo.WorkerId}", body: messageBytes);
         Console.WriteLine("Message sent");
     }
 }

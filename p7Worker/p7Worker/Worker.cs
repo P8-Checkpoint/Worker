@@ -22,9 +22,6 @@ public class Worker
     RabbitMQHandler _handler;
     ContainerController _containerController;
     FileOperations _fileOperations;
-    Guid _workerId;
-    string _serverName;
-    string _replyQueueName;
     string _container;
     string _image;
     string _payloadName;
@@ -41,8 +38,8 @@ public class Worker
         _container = "WorkerImage";
         _image = "Benchmark";
         _payloadName = "payload.py";
-        _workerId = Guid.NewGuid();
-        _handler = new RabbitMQHandler(_workerId);
+        WorkerInfo.WorkerId = Guid.NewGuid().ToString();
+        _handler = new RabbitMQHandler();
         _containerController = new ContainerController();
         _fileOperations = new FileOperations();
         Connect();
@@ -53,8 +50,7 @@ public class Worker
         _handler.Register();
         _handler.AddWorkerConsumer(WorkerConsumer);
         Thread.Sleep(100);
-        string workerID = _workerId.ToString();
-        _handler.SendMessage($"{workerID} is active and ready to recieve work1");
+        _handler.SendMessage($"{WorkerInfo.WorkerId} is active and ready to recieve work1");
     }
 
     public async Task CreateAndExecuteContainerAsync()
@@ -62,7 +58,7 @@ public class Worker
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.Console()
-            .WriteTo.File($"logs/p7-{_workerId}-log.txt", rollingInterval: RollingInterval.Day)
+            .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
             .CreateLogger();
 
         Console.WriteLine("Starting Program...");
@@ -132,7 +128,7 @@ public class Worker
 
         using (WebClient request = new WebClient())
         {
-            // request.credentials = new networkcredential("username", "p@55w0rd");
+            //request.Credentials = new NetworkCredential("p1user", "1234");
             byte[] filedata = request.DownloadData(ftpLink);
 
             using (FileStream file = File.Create(downloadname))

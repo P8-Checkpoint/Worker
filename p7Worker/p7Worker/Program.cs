@@ -6,7 +6,6 @@ using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using p7Worker;
-using p7Worker.WorkerInfo;
 
 namespace p7Worker;
 

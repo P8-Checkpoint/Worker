@@ -4,11 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace p7Worker
+namespace p7Worker;
+
+public static class WorkerInfo
 {
-    public class WorkerInfo
-    {
-        public static string WorkerId = string.Empty { get; set; }
-        public static string ServerName = string.Empty { get; set; }
-    }
+    public static string WorkerId { get; set; } = string.Empty;
+    public static string ServerName { get; set; } = string.Empty;
 }
