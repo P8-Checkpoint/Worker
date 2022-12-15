@@ -92,8 +92,10 @@ public class RabbitMQHandler
     public IBasicProperties GetBasicProperties(string type)
     {
         var props = _channel.CreateBasicProperties();
-        props.Headers = new Dictionary<string, object>();
-        props.Headers.Add("type", type);
+        props.Headers = new Dictionary<string, object>
+        {
+            { "type", type }
+        };
         return props;
     }
 }
