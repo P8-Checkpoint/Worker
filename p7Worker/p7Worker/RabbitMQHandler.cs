@@ -82,10 +82,20 @@ public class RabbitMQHandler
             autoAck: true);
     }
 
-    public void SendMessage(string message)
+    public void SendMessage(string message, IBasicProperties props)
     {
         var messageBytes = Encoding.UTF8.GetBytes(message);
-        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.{WorkerInfo.WorkerId}", body: messageBytes);
-        Console.WriteLine("Message sent");
+
+        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.{WorkerInfo.WorkerId}", basicProperties: props, body: messageBytes);
+    }
+
+    public IBasicProperties GetBasicProperties(string type)
+    {
+        var props = _channel.CreateBasicProperties();
+        props.Headers = new Dictionary<string, object>
+        {
+            { "type", type }
+        };
+        return props;
     }
 }
