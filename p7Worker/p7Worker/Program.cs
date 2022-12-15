@@ -5,41 +5,29 @@ using System.Threading;
 using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using p7Worker;
+using p7Worker.WorkerInfo;
 
 namespace p7Worker;
 
 internal class Program
 {
-    static async Task Main(string[] args)
+    static void Main(string[] args)
     {
         // Change these values to suit your needs
-        string container = "magnustest1";
-        string image = "busybox";
-        string storageDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-        string payloadName = "4seconds";
-
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.Console()
-            .WriteTo.File($"logs/p7-{payloadName}-log.txt", rollingInterval: RollingInterval.Day)
-            .CreateLogger();
-
-        ContainerController cc = new ContainerController();
-        FileOperations fo = new FileOperations();
+        var rabbitMQHandler = new RabbitMQHandler();
+        var worker = new Worker();
 
         try
         {
-            var rabbitMQHandler = new RabbitMQHandler();
-            rabbitMQHandler.Register();
-            Thread.Sleep(100);
-            rabbitMQHandler.SendMessage($"Hello {Environment.UserName}");
-
-            Console.WriteLine("Hello");
+            worker.Connect(rabbitMQHandler);
+            WorkerInfo.WorkerInfo.DownloadFTPFile();
+            worker.CreateAndExecuteContainerAsync().RunSynchronously();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Something went wrong");
+            rabbitMQHandler.SendMessage($"Status: Failed on error: {ex}");
         }
         finally
         {

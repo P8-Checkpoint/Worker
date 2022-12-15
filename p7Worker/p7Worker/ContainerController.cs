@@ -13,6 +13,8 @@ public class ContainerController
     DockerClient client = new DockerClientConfiguration(
             new Uri("unix:///var/run/docker.sock")).CreateClient();
 
+    FileOperations fo = new FileOperations();
+
     string PathToContainers = $@"/var/lib/docker/containers/";
 
     public async Task CreateImageAsync(string imageName)
@@ -30,25 +32,21 @@ public class ContainerController
         Log.Information($"Created image: {imageName}");
     }
 
-    public async Task CreateContainerAsync(string name, string image, string payloadTotalPath)
+    public async Task CreateContainerAsync(string name, string image)
     {
+        // sudo docker create --name name image /bin/sh - c $"python3 /home/{payloadName}";
+        IList<string> args = new List<string>();
+        args.Append($"/bin/sh - c \"python3 /home/payload.py\"");
+
         await client.Containers.CreateContainerAsync(new CreateContainerParameters()
         {
             Image = image,
             Name = name,
-            // TODO: Add arbitrary arguments // TODO: Check if necessary
+            Cmd = args
         },
         CancellationToken.None);
-
 
         string id = await GetContainerIDByNameAsync(name);
-
-        await client.Containers.ExtractArchiveToContainerAsync(id, new ContainerPathStatParameters
-        {
-            Path = payloadTotalPath
-        },
-        null,
-        CancellationToken.None);
 
         Log.Information($"Created Container, id: {id}, name: {name}");
     }
@@ -74,20 +72,16 @@ public class ContainerController
                 Limit = 10,
             },
             CancellationToken.None);
-        Console.WriteLine(containers[0]);
 
         string containerID;
 
         foreach (var container in containers)
         {
-            if (container.Names.Contains("containerName"))
-            {
-                containerID = container.ID;
+            containerID = container.ID;
 
-                Log.Information($"Container {containerName} has id: \n{containerID}");
+            Log.Information($"Container {containerName} has id: \n{containerID}");
 
-                return containerID;
-            }
+            return containerID;
         }
 
         return "";
@@ -124,7 +118,7 @@ public class ContainerController
         Log.Information($"Container is running: {id}. Checkpointing every {interval}ms");
 
         IList<string> args = new List<string>();
-        args.Add($"python {payloadName}.py");
+        args.Add($"python {payloadName}");
         await client.Exec.StartWithConfigContainerExecAsync(
             id,
             new ContainerExecStartParameters()
@@ -157,7 +151,7 @@ public class ContainerController
         var execTime = Stopwatch.StartNew();
 
         IList<string> args = new List<string>();
-        args.Add($"python {payloadName}.py");
+        args.Add($"python .{payloadName}");
         await client.Exec.StartWithConfigContainerExecAsync(
             id,
             new ContainerExecStartParameters()
@@ -166,6 +160,17 @@ public class ContainerController
             },
             CancellationToken.None
         );
+
+        // using (Process process = new Process())
+        // {
+        //     process.StartInfo.FileName = "docker";
+        //     process.StartInfo.Arguments = $"exec {id} .{payloadName}.py";
+        //     process.StartInfo.UseShellExecute = false;
+        //     process.StartInfo.RedirectStandardOutput = true;
+        //     process.Start();
+        //     string output = process.StandardOutput.ReadToEnd();
+        //     process.WaitForExit();
+        // }
 
         execTime.Stop();
         Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
@@ -195,7 +200,7 @@ public class ContainerController
         string payload,
         string image)
     {
-        await CreateContainerAsync(containerName, image, payload);
+        await CreateContainerAsync(containerName, image);
         // TODO: Arguments --security-opt seccomp:unconfined // TODO: Check if necessary
 
         using (Process process = new Process())

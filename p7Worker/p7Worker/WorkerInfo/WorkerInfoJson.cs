@@ -10,10 +10,12 @@ public class WorkerInfoJson
 {
     public string WorkerId { get; set; }
     public string ServerName { get; set; }
+    public string FTPLink { get; set; }
 
-    public WorkerInfoJson(string workerId, string serverName)
+    public WorkerInfoJson(string workerId, string serverName, string ftplink)
     {
         WorkerId = workerId;
         ServerName = serverName;
+        FTPLink = ftplink;
     }
 }

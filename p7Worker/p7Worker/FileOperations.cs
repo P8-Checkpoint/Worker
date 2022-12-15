@@ -10,9 +10,8 @@ namespace p7Worker;
 
 public class FileOperations
 {
-
     string pathToContainers = $@"/var/lib/docker/containers";
-    string pathToHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    string pathToHome = "/p7";
 
     public void MovePayloadIntoContainer(string payloadName, string containerID)
     {
@@ -109,5 +108,16 @@ public class FileOperations
         string destFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
 
         System.IO.File.Copy(sourceFile, destFile, true);
+    }
+
+    public void PredFile(string filePath)
+    {
+        // Add a line to the beginning of the file
+        string startLine = "import sys \n \n f = open(\"worker.result\", \"w\") \n sys.stdout = f";
+        File.WriteAllText(filePath, startLine + Environment.NewLine);
+
+        // Add a line to the end of the file
+        string endLine = "sys.stdout = sys.__stdout__ \n f.close()";
+        File.AppendAllText(filePath, Environment.NewLine + endLine);
     }
 }

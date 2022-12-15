@@ -11,9 +11,11 @@ public class RegisterResponseDTO
     public string WorkerId { get; set; }
     public string ServerName { get; set; }
 
-    public RegisterResponseDTO(string workerId, string serverName)
+    public RegisterResponseDTO(string workerId, string serverName, string ftpLink)
     {
         WorkerId = workerId;
         ServerName = serverName;
+        ftpLink = ftpLink;
+
     }
 }
