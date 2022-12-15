@@ -15,9 +15,12 @@ public class RabbitMQHandler
 {
     IModel _channel;
     string _replyConsumerTag;
+    string _workerQueueName;
+    Guid _workerId;
 
-    public RabbitMQHandler()
+    public RabbitMQHandler(Guid workerId)
     {
+        _workerId = workerId;
         Init();
     }
 
@@ -43,8 +46,12 @@ public class RabbitMQHandler
 
             if (ea.BasicProperties.CorrelationId == correlationId)
             {
-                WorkerInfoJson? workerInfoJson = JsonSerializer.Deserialize<WorkerInfoJson>(response);
+                RegisterResponseDTO? workerInfoJson = JsonSerializer.Deserialize<RegisterResponseDTO>(response);
                 WorkerInfo.WorkerInfo.SetWorkerInfo(workerInfoJson);
+
+                _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerInfo.GetWorkerId(), autoDelete: false, exclusive: false);
+                _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerInfo.GetWorkerId());
+
                 Connect();
             }
             else
@@ -77,6 +84,18 @@ public class RabbitMQHandler
         _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.WorkerInfo.GetServerName()}.workerConnect", body: messageBytes);
         Console.WriteLine("Connected to server {}. You can now freely send messages!");
         _channel.BasicCancel(_replyConsumerTag);
+    }
+
+    public void AddWorkerConsumer(EventHandler<BasicDeliverEventArgs> remoteProcedure)
+    {
+        var consumer = new EventingBasicConsumer(_channel);
+
+        consumer.Received += remoteProcedure;
+
+        _channel.BasicConsume(
+            consumer: consumer,
+            queue: _workerQueueName,
+            autoAck: true);
     }
 
     public void SendMessage(string message)
