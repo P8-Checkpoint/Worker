@@ -47,8 +47,7 @@ public class Worker
 
     public void Connect()
     {
-        _handler.Register();
-        _handler.AddWorkerConsumer(WorkerConsumer);
+        _handler.Register(RegisterResponseRecieved);
         Thread.Sleep(100);
         _handler.SendMessage($"{WorkerInfo.WorkerId} is active and ready to recieve work1");
     }
@@ -98,7 +97,7 @@ public class Worker
         if (!ea.BasicProperties.Headers.ContainsKey("type"))
             return;
 
-        switch (ea.BasicProperties.Headers["type"].ToString())
+        switch (Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]))
         {
             case "startJob":
                 var startJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
@@ -119,6 +118,19 @@ public class Worker
             default:
                 break;
         }
+    }
+
+    void RegisterResponseRecieved(object? model, BasicDeliverEventArgs ea)
+    {
+        var body = ea.Body.ToArray();
+        var response = Encoding.UTF8.GetString(body);
+
+        RegisterResponseDTO? responseJson = JsonSerializer.Deserialize<RegisterResponseDTO>(response);
+        WorkerInfo.WorkerId = responseJson.WorkerId;
+        WorkerInfo.ServerName = responseJson.ServerName;
+        _handler.DeclareWorkerQueue();
+        _handler.Connect();
+        _handler.AddWorkerConsumer(WorkerConsumer);
     }
 
     void Downloadftpfile(string ftpLink)

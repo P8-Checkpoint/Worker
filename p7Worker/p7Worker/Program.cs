@@ -18,6 +18,10 @@ internal class Program
 
         try
         {
+            while (true)
+            {
+                Thread.Sleep(100);
+            }
             //WorkerInfo.WorkerInfo.DownloadFTPFile();
             //worker.CreateAndExecuteContainerAsync().RunSynchronously();
         }

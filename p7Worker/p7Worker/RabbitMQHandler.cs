@@ -28,7 +28,7 @@ public class RabbitMQHandler
         _channel = connection.CreateModel();
     }
 
-    public void Register()
+    public void Register(EventHandler<BasicDeliverEventArgs> remoteProcedure)
     {
         var replyQueueName = _channel.QueueDeclare(autoDelete: true, exclusive: true).QueueName;
 
@@ -36,26 +36,7 @@ public class RabbitMQHandler
 
         var correlationId = Guid.NewGuid().ToString();
 
-        consumer.Received += (model, ea) =>
-        {
-            var body = ea.Body.ToArray();
-            var response = Encoding.UTF8.GetString(body);
-
-            if (ea.BasicProperties.CorrelationId == correlationId)
-            {
-                RegisterResponseDTO? workerInfoJson = JsonSerializer.Deserialize<RegisterResponseDTO>(response);
-                //WorkerInfo.WorkerInfo.SetWorkerInfo(workerInfoJson);
-
-                _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerId, autoDelete: false, exclusive: false);
-                _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerId);
-
-                Connect();
-            }
-            else
-            {
-                Console.WriteLine("Expected correlationId: {0} but received response with correlationId: {1}", correlationId, ea.BasicProperties.CorrelationId);
-            }
-        };
+        consumer.Received += remoteProcedure;
 
         _replyConsumerTag = _channel.BasicConsume(
             consumer: consumer,
@@ -73,6 +54,12 @@ public class RabbitMQHandler
         _channel.BasicPublish(exchange: "server", routingKey: "workerRegister", basicProperties: props, body: messageBytes);
 
         Console.WriteLine("Registration sent to server");
+    }
+
+    public void DeclareWorkerQueue()
+    {
+        _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerId, autoDelete: false, exclusive: false);
+        _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerId);
     }
 
     public void Connect()
