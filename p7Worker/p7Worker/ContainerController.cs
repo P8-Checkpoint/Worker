@@ -32,19 +32,46 @@ public class ContainerController
         Log.Information($"Created image: {imageName}");
     }
 
+    public async Task LoadImageAsync(string imagePath)
+    {
+        using (Process process = new Process())
+        {
+            process.StartInfo.FileName = "docker";
+            process.StartInfo.Arguments = $"load -i {imagePath}";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.Start();
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+        }
+
+        Log.Information($"Loaded image: {imagePath}");
+    }
+
     public async Task CreateContainerAsync(string name, string image)
     {
-        // sudo docker create --name name image /bin/sh - c $"python3 /home/{payloadName}";
+        // sudo docker create --name name --security-opt seccomp:unconfined image /bin/sh - c $"python3 /home/{payloadName}";
         IList<string> args = new List<string>();
         args.Append($"/bin/sh - c \"python3 /home/payload.py\"");
 
-        await client.Containers.CreateContainerAsync(new CreateContainerParameters()
+        // await client.Containers.CreateContainerAsync(new CreateContainerParameters()
+        // {
+        //     Image = image,
+        //     Name = name,
+        //     Cmd = args
+        // },
+        // CancellationToken.None);
+
+        using (Process process = new Process())
         {
-            Image = image,
-            Name = name,
-            Cmd = args
-        },
-        CancellationToken.None);
+            process.StartInfo.FileName = "docker";
+            process.StartInfo.Arguments = $"create --name {name} --security-opt seccomp:unconfined {image} /bin/sh - c \"python3 /home/payload.py\"";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.Start();
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+        }
 
         string id = await GetContainerIDByNameAsync(name);
 
@@ -176,7 +203,7 @@ public class ContainerController
         Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
     }
 
-    public void Checkpoint(string id, string checkpointName)
+    public async void Checkpoint(string id, string checkpointName)
     {
 
         using (Process process = new Process())
@@ -201,7 +228,6 @@ public class ContainerController
         string image)
     {
         await CreateContainerAsync(containerName, image);
-        // TODO: Arguments --security-opt seccomp:unconfined // TODO: Check if necessary
 
         using (Process process = new Process())
         {

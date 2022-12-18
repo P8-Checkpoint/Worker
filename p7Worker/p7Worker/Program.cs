@@ -13,8 +13,8 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        
-        var worker = new Worker();
+        var _handler = new RabbitMQHandler();
+        var worker = new Worker(_handler);
 
         try
         {
@@ -22,13 +22,12 @@ internal class Program
             {
                 Thread.Sleep(100);
             }
-            //WorkerInfo.WorkerInfo.DownloadFTPFile();
-            //worker.CreateAndExecuteContainerAsync().RunSynchronously();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Something went wrong");
-            //rabbitMQHandler.SendMessage($"Status: Failed on error: {ex}");
+            var props = _handler.GetBasicProperties("type");
+            _handler.SendMessage($"Status: Failed on error: {ex}", props);
         }
         finally
         {
