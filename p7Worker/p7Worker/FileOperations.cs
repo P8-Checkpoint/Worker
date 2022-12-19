@@ -19,7 +19,7 @@ public class FileOperations
 
     public void MovePayloadIntoContainer(string payloadName, string containerID)
     {
-        string payload = System.IO.Path.Combine(pathToHome, payloadName);
+        string payload = Path.Combine(pathToHome, payloadName);
 
         using (Process process = new Process())
         {
@@ -35,7 +35,7 @@ public class FileOperations
 
     public void ExtractResultFromContainer(string resultName, string containerID)
     {
-        string resultDestination = System.IO.Path.Combine(pathToHome, resultName);
+        string resultDestination = Path.Combine(pathToHome, resultName);
 
         using (Process process = new Process())
         {
@@ -64,10 +64,10 @@ public class FileOperations
             process.WaitForExit();
         }
 
-        string sourceFile = System.IO.Path.Combine(pathToCheckpoints, checkpointName);
-        string destFile = System.IO.Path.Combine(pathToHome, checkpointName);
+        string sourceFile = Path.Combine(pathToCheckpoints, checkpointName);
+        string destFile = Path.Combine(pathToHome, checkpointName);
 
-        System.IO.File.Copy(sourceFile, destFile, true);
+        Directory.Move($@"/var/lib/docker/containers/{containerID}/checkpoints/{checkpointName}", $@"/p7/{checkpointName}");
     }
 
     public void MoveAllCheckpointsFromContainer(string containerID)
@@ -112,17 +112,18 @@ public class FileOperations
         string sourceFile = System.IO.Path.Combine(pathToHome, checkpoint);
         string destFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
 
-        System.IO.File.Copy(sourceFile, destFile, true);
+        File.Copy(sourceFile, destFile, true);
     }
 
     public void PredFile(string filePath)
     {
         // Add a line to the beginning of the file
-        string startLine = "import sys \n \n f = open(\"worker.result\", \"w\") \n sys.stdout = f";
-        File.WriteAllText(filePath, startLine + Environment.NewLine);
+        string startLine = "import sys \n \nf = open(\"worker.result\", \"w\") \nsys.stdout = f";
+        string currentContent = File.ReadAllText(filePath);
+        File.WriteAllText(filePath, startLine + Environment.NewLine + currentContent);
 
         // Add a line to the end of the file
-        string endLine = "sys.stdout = sys.__stdout__ \n f.close()";
+        string endLine = "sys.stdout = sys.__stdout__ \nf.close()";
         File.AppendAllText(filePath, Environment.NewLine + endLine);
     }
 }

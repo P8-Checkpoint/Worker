@@ -42,9 +42,11 @@ public class Worker
     void Init()
     {
         _containerName = "worker";
-        _storageDirectory = "p7";
+        _checkpointName = "checkpoint";
+        _storageDirectory = "/p7";
         _resultName = "worker.result";
         _responseFrequency = 10000;
+        _checkpointFrequency = 5000;
         WorkerInfo.WorkerId = Guid.NewGuid().ToString();
         _containerController = new ContainerController();
         _fileOperations = new FileOperations(_storageDirectory);
@@ -70,7 +72,7 @@ public class Worker
         Log.Information($"Hello, {Environment.UserName}!");
 
         // Create a container
-        await _containerController.CreateContainerAsync(_containerName, image, Path.Combine(_storageDirectory, _payloadName));
+        await _containerController.CreateContainerAsync(_containerName, image, _payloadName);
 
         // Log total elapsed time per run
         var totalTime = Stopwatch.StartNew();
@@ -78,23 +80,27 @@ public class Worker
         // Start Container
         string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
 
-        Console.WriteLine($"The id is {containerID}");
+        Console.WriteLine(Path.Combine(_storageDirectory, _payloadName));
+        _fileOperations.PredFile(Path.Combine(_storageDirectory, _payloadName));
 
-        _fileOperations.MovePayloadIntoContainer("20seconds.py", _containerName);
+        _fileOperations.MovePayloadIntoContainer(_payloadName, _containerName);
 
-        _containerController.StartAsync(containerID);
+        await _containerController.StartAsync(containerID);
 
-        Task.Run(() =>
+        bool running = _containerController.ContainerIsRunningAsync(containerID).Result;
+        int i = 0;
+        while (running)
         {
-            while (_containerController.ContainerIsRunningAsync(containerID).Result)
-            {
-                Thread.Sleep(_checkpointFrequency);
-                _containerController.Checkpoint(containerID, _checkpointName);
+            string checkpointNamei = _checkpointName + i.ToString();
+            _containerController.Checkpoint(_containerName, _checkpointName + i.ToString());
 
-                _fileOperations.MoveCheckpointFromContainer(_checkpointName, containerID);
-                _ftpClient.UploadFile(Path.Combine(_storageDirectory, _checkpointName), remoteBackupPath);
-            }
-        });
+            _fileOperations.MoveCheckpointFromContainer(checkpointNamei, containerID);
+            // _ftpClient.UploadFile(Path.Combine(_storageDirectory, _checkpointName), remoteBackupPath);
+            Console.Write("\nUploaded checkpoint\n");
+            Thread.Sleep(_checkpointFrequency);
+            i++;
+            running = _containerController.ContainerIsRunningAsync(containerID).Result;
+        }
 
         totalTime.Stop();
         Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
@@ -106,40 +112,42 @@ public class Worker
         _runningContainer = false;
     }
 
-    public async Task RecoverAndExecuteContainerAsync()
-    {
-        string image = "python:3.10-alpine";
+    // public async Task RecoverAndExecuteContainerAsync()
+    // {
+    //     string image = "python:3.10-alpine";
 
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.Console()
-            .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
-            .CreateLogger();
+    //     Log.Logger = new LoggerConfiguration()
+    //         .MinimumLevel.Debug()
+    //         .WriteTo.Console()
+    //         .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
+    //         .CreateLogger();
 
-        Console.WriteLine("Starting Program...");
-        Log.Information($"Hello, {Environment.UserName}!");
+    //     Console.WriteLine("Starting Program...");
+    //     Log.Information($"Hello, {Environment.UserName}!");
 
-        // Log total elapsed time per run
-        var totalTime = Stopwatch.StartNew();
+    //     // Log total elapsed time per run
+    //     var totalTime = Stopwatch.StartNew();
 
-        // Create a container
-        await _containerController.CreateContainerAsync(_containerName, image, Path.Combine(_storageDirectory, _payloadName));
+    //     // Create a container
+    //     await _containerController.CreateContainerAsync(_containerName, image, Path.Combine(_storageDirectory, _payloadName));
 
-        // Move checkpoint into container and start
-        string checkpointID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
-        _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
-        _containerController.StartAsync(checkpointID).RunSynchronously();
+    //     // Move checkpoint into container and start
+    //     string checkpointID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
+    //     _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
+    //     _containerController.StartAsync(checkpointID).RunSynchronously();
 
-        await _containerController.DeleteContainerAsync(checkpointID);
+    //     await _containerController.DeleteContainerAsync(checkpointID);
 
-        totalTime.Stop();
-        Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
-    }
+    //     totalTime.Stop();
+    //     Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
+    // }
 
-    void WorkerConsumerAsync(object? model, BasicDeliverEventArgs ea)
+    void WorkerConsumer(object? model, BasicDeliverEventArgs ea)
     {
         var body = ea.Body.ToArray();
+
         var message = Encoding.UTF8.GetString(body);
+        Console.WriteLine(message);
 
         if (!ea.BasicProperties.Headers.ContainsKey("type"))
         {
@@ -157,25 +165,42 @@ public class Worker
                 string[] parts = startJobInfo.FTPLink.Split(':');
                 _payloadName = startJobInfo.SourcePath.Split('/').Last();
 
-                _ftpClient = new FtpClient(parts[0], parts[1], parts[2]);
+                Console.WriteLine("Set PayloadName");
+                _payloadName = "20seconds.py";
 
-                DownloadFTPfile(startJobInfo.SourcePath);
+                // _ftpClient = new FtpClient(parts[0], parts[1], parts[2]);
+                // _ftpClient.AutoConnect();
+                // DownloadFTPfile(startJobInfo.SourcePath);
+                Console.WriteLine("Downloaded source");
 
+                Console.WriteLine("Running Container True");
                 _runningContainer = true;
-                CreateAndExecuteContainerAsync(startJobInfo.BackupPath);
+                // CreateAndExecuteContainerAsync(startJobInfo.BackupPath);
 
-                Task.Run(() =>
+                var task = Task.Run(() =>
                 {
+                    Console.WriteLine("\n\nCreating Container");
+                    CreateAndExecuteContainerAsync("/p7/backup/checkpoint");
+                    Console.WriteLine("\n\nDone creating and running");
+
                     while (_runningContainer)
                     {
+                        Console.WriteLine("\n\nResponse sent");
                         Thread.Sleep(_responseFrequency);
-                        WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(startJobInfo.JobId));
-                        _handler.SendMessage(JsonSerializer.Serialize(workerReport), props);
+                        // WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(startJobInfo.JobId));
+                        // _handler.SendMessage(JsonSerializer.Serialize(workerReport), props);
+                        Console.WriteLine("\n\nContainer is running outer:" + _runningContainer);
                     }
                 });
 
-                UploadFTPfile(startJobInfo.ResultPath);
+                Task.WaitAll(task);
+
+                Console.WriteLine("Done Running Container");
+
+                // UploadFTPfile(startJobInfo.ResultPath);
+                Console.WriteLine("Uploaded result");
                 _handler.SendMessage(JsonSerializer.Serialize(startJobInfo), props);
+                Console.WriteLine("Done UWU");
                 break;
 
             // case "recoverJob":
@@ -206,8 +231,8 @@ public class Worker
             case "stopJob":
                 string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
                 _containerController.StopContainer(containerID).Wait();
-
-                _handler.SendMessage("Stopped", props);
+                Console.WriteLine("Stopped");
+                // _handler.SendMessage("Stopped", props);
                 break;
 
             default:
@@ -225,14 +250,13 @@ public class Worker
         WorkerInfo.ServerName = responseJson.ServerName;
         _handler.DeclareWorkerQueue();
         _handler.Connect();
-        _handler.AddWorkerConsumer(WorkerConsumerAsync);
+        _handler.AddWorkerConsumer(WorkerConsumer);
     }
 
     void DownloadFTPfile(string remoteSourcePath)
     {
         string localSourcePath = Path.Combine(_storageDirectory, _payloadName);
 
-        _ftpClient.AutoConnect();
         _ftpClient.DownloadFile(localSourcePath, remoteSourcePath);
     }
 
@@ -240,7 +264,6 @@ public class Worker
     {
         string localResultPath = Path.Combine(_storageDirectory, _resultName);
 
-        _ftpClient.AutoConnect();
         _ftpClient.UploadFile(localResultPath, Path.Combine(remoteResultPath, _resultName));
     }
 }

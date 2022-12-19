@@ -46,12 +46,12 @@ public class ContainerController
         Log.Information($"Loaded image: {imagePath}");
     }
 
-    public async Task CreateContainerAsync(string containerName, string image, string payloadPath)
+    public async Task CreateContainerAsync(string containerName, string image, string payloadName)
     {
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"create --name {containerName} --security-opt seccomp:unconfined {image} /bin/sh - c \"python3 {payloadPath}\"";
+            process.StartInfo.Arguments = $"create --name {containerName} --security-opt seccomp:unconfined {image} /bin/sh -c \"python3 {payloadName}\"";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -157,13 +157,13 @@ public class ContainerController
     //     Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
     // }
 
-    public async void Checkpoint(string id, string checkpointName)
+    public void Checkpoint(string name, string checkpointName)
     {
 
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"checkpoint create {id} {checkpointName} --leave-running";
+            process.StartInfo.Arguments = $"checkpoint create --leave-running {name} {checkpointName}";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -171,7 +171,7 @@ public class ContainerController
             process.WaitForExit();
         }
 
-        Log.Information($"Checkpointed container: {id}");
+        Log.Information($"Checkpointed container: {name}");
     }
 
     public async Task RestoreAsync(
@@ -205,7 +205,7 @@ public class ContainerController
 
         foreach (var container in containers)
         {
-            if (container.Status.StartsWith("Up"))
+            if (container.ID == id && container.Status.StartsWith("Up"))
             {
                 return true;
             }
