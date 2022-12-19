@@ -23,12 +23,15 @@ public class Worker
     RabbitMQHandler _handler;
     ContainerController _containerController;
     FileOperations _fileOperations;
-    string _container;
-    string _image;
+    FtpClient _ftpClient;
+    string _containerName;
     string _payloadName;
+    string _resultName;
     string _checkpointName;
     string _storageDirectory;
     int _responseFrequency;
+    int _checkpointFrequency;
+    bool _runningContainer;
 
     public Worker(RabbitMQHandler handler)
     {
@@ -38,28 +41,23 @@ public class Worker
 
     void Init()
     {
-        _container = "worker";
-        _image = "workerimage.tar";
-        _payloadName = "payload.py";
-        _checkpointName = "checkpoint";
+        _containerName = "worker";
         _storageDirectory = "p7";
-        _responseFrequency = 20;
+        _resultName = "worker.result";
+        _responseFrequency = 10000;
         WorkerInfo.WorkerId = Guid.NewGuid().ToString();
-        // _handler = new RabbitMQHandler();
         _containerController = new ContainerController();
-        _fileOperations = new FileOperations();
+        _fileOperations = new FileOperations(_storageDirectory);
+        _runningContainer = false;
         Connect();
     }
 
     public void Connect()
     {
         _handler.Register(RegisterResponseRecieved);
-        Thread.Sleep(100);
-        var props = _handler.GetBasicProperties("type");
-        _handler.SendMessage($"{WorkerInfo.WorkerId} is active and ready to recieve work!", props);
     }
 
-    public async Task CreateAndExecuteContainerAsync()
+    public async Task CreateAndExecuteContainerAsync(string remoteBackupPath)
     {
         string image = "python:3.10-alpine";
 
@@ -69,28 +67,43 @@ public class Worker
             .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
             .CreateLogger();
 
-        Console.WriteLine("Starting Program...");
         Log.Information($"Hello, {Environment.UserName}!");
+
+        // Create a container
+        await _containerController.CreateContainerAsync(_containerName, image, Path.Combine(_storageDirectory, _payloadName));
 
         // Log total elapsed time per run
         var totalTime = Stopwatch.StartNew();
 
-        // Create a container
-        await _containerController.CreateContainerAsync(_container, image);
-
         // Start Container
-        string containerID = _containerController.GetContainerIDByNameAsync(_container).Result;
+        string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
 
         Console.WriteLine($"The id is {containerID}");
 
-        _fileOperations.MovePayloadIntoContainer("20seconds.py", _container);
+        _fileOperations.MovePayloadIntoContainer("20seconds.py", _containerName);
 
-        await _containerController.StartAsync(containerID);
+        _containerController.StartAsync(containerID);
 
-        await _containerController.DeleteContainerAsync(containerID);
+        Task.Run(() =>
+        {
+            while (_containerController.ContainerIsRunningAsync(containerID).Result)
+            {
+                Thread.Sleep(_checkpointFrequency);
+                _containerController.Checkpoint(containerID, _checkpointName);
+
+                _fileOperations.MoveCheckpointFromContainer(_checkpointName, containerID);
+                _ftpClient.UploadFile(Path.Combine(_storageDirectory, _checkpointName), remoteBackupPath);
+            }
+        });
 
         totalTime.Stop();
         Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
+
+        _fileOperations.ExtractResultFromContainer(_resultName, containerID);
+
+        await _containerController.DeleteContainerAsync(containerID);
+
+        _runningContainer = false;
     }
 
     public async Task RecoverAndExecuteContainerAsync()
@@ -110,10 +123,10 @@ public class Worker
         var totalTime = Stopwatch.StartNew();
 
         // Create a container
-        await _containerController.CreateContainerAsync(_container, image);
+        await _containerController.CreateContainerAsync(_containerName, image, Path.Combine(_storageDirectory, _payloadName));
 
         // Move checkpoint into container and start
-        string checkpointID = _containerController.GetContainerIDByNameAsync(_container).Result;
+        string checkpointID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
         _fileOperations.MoveCheckpointIntoContainer(_checkpointName, checkpointID);
         _containerController.StartAsync(checkpointID).RunSynchronously();
 
@@ -123,99 +136,78 @@ public class Worker
         Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
     }
 
-    void WorkerConsumer(object? model, BasicDeliverEventArgs ea)
+    void WorkerConsumerAsync(object? model, BasicDeliverEventArgs ea)
     {
         var body = ea.Body.ToArray();
         var message = Encoding.UTF8.GetString(body);
 
         if (!ea.BasicProperties.Headers.ContainsKey("type"))
+        {
             return;
+        }
+
+        var props = _handler.GetBasicProperties("type");
+
         switch (Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]))
         {
             case "startJob":
-                Console.WriteLine("Received");
-                var startProps = _handler.GetBasicProperties("type");
-
                 var startJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
-                // string downloadStartName = "workerDownload";
+                _handler.SendMessage(JsonSerializer.Serialize(startJobInfo), props);
 
-                // Downloadftpfile(startJobInfo.FTPLink, downloadStartName);
+                string[] parts = startJobInfo.FTPLink.Split(':');
+                _payloadName = startJobInfo.SourcePath.Split('/').Last();
 
-                _containerController.LoadImageAsync($"/p7/workerdownload/workerimage.tar").Wait();
+                _ftpClient = new FtpClient(parts[0], parts[1], parts[2]);
 
-                var startResponse = new BasicResponse { WorkerId = WorkerInfo.WorkerId, JobId = startJobInfo.JobId };
-                _handler.SendMessage(JsonSerializer.Serialize(startResponse), startProps);
+                DownloadFTPfile(startJobInfo.SourcePath);
 
-                PeriodicStillUpResponse(TimeSpan.FromSeconds(_responseFrequency), () =>
+                _runningContainer = true;
+                CreateAndExecuteContainerAsync(startJobInfo.BackupPath);
+
+                Task.Run(() =>
                 {
-                    _handler.SendMessage(JsonSerializer.Serialize(startResponse), startProps);
-                }, async () =>
-                {
-                    await CreateAndExecuteContainerAsync();
-                }).RunSynchronously();
+                    while (_runningContainer)
+                    {
+                        Thread.Sleep(_responseFrequency);
+                        WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(startJobInfo.JobId));
+                        _handler.SendMessage(JsonSerializer.Serialize(workerReport), props);
+                    }
+                });
 
-                // Console.WriteLine(startJobInfo.FTPLink);
-                // Console.WriteLine(startJobInfo.JobId);
-                // Console.WriteLine(startJobInfo.ResultPath);
-                // Console.WriteLine(startJobInfo.SourcePath);
-
-                _handler.SendMessage(JsonSerializer.Serialize(startResponse), startProps);
-                Console.WriteLine("All done UWU!");
+                UploadFTPfile(startJobInfo.ResultPath);
+                _handler.SendMessage(JsonSerializer.Serialize(startJobInfo), props);
                 break;
 
-            case "recoverJob":
-                var recoverProps = _handler.GetBasicProperties("type");
+            // case "recoverJob":
+            //     var recoverJobInfo = JsonSerializer.Deserialize<JobRecoverDTO>(message);
+            //     _handler.SendMessage(JsonSerializer.Serialize(recoverJobInfo), props);
 
-                var recoverJobInfo = JsonSerializer.Deserialize<JobRecoverDTO>(message);
-                // string downloadRecoverName = "workerDownload";
+            //     DownloadFTPfile(recoverJobInfo.FTPLink, recoverJobInfo.SourcePath); // Source
+            //     DownloadFTPfile(recoverJobInfo.FTPLink, recoverJobInfo.BackupPath); // Checkpoint
 
-                // Downloadftpfile(recoverJobInfo.FTPLink, downloadRecoverName);
+            //     _checkpointName = recoverJobInfo.BackupPath.Split("/").Last();
+            //     _runningContainer = true;
+            //     RecoverAndExecuteContainerAsync();
 
-                _containerController.LoadImageAsync($"/p7/workerdownload/{_image}").RunSynchronously();
+            //     Task.Run(() =>
+            //     {
+            //         while (_runningContainer)
+            //         {
+            //             Thread.Sleep(_responseFrequency);
+            //             WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(recoverJobInfo.JobId));
+            //             _handler.SendMessage(JsonSerializer.Serialize(workerReport), props);
+            //         }
+            //     });
 
-                var recoverResponse = new BasicResponse { WorkerId = WorkerInfo.WorkerId, JobId = recoverJobInfo.JobId };
-                _handler.SendMessage(JsonSerializer.Serialize(recoverResponse), recoverProps);
-
-                // PeriodicStillUpResponse(TimeSpan.FromSeconds(_responseFrequency), () =>
-                // {
-                //     _handler.SendMessage(JsonSerializer.Serialize(recoverResponse), recoverProps);
-                // }, async () =>
-                // {
-                //     await RecoverAndExecuteContainerAsync();
-                // }).Wait();
-
-                _handler.SendMessage(JsonSerializer.Serialize(recoverResponse), recoverProps);
-                break;
+            //     UploadFTPfile(recoverJobInfo.FTPLink, recoverJobInfo.ResultPath);
+            //     _handler.SendMessage(JsonSerializer.Serialize(recoverJobInfo), props);
+            //     break;
 
             case "stopJob":
-                // string containerID = _containerController.GetContainerIDByNameAsync(_container).Result;
-                // _containerController.StopContainer(containerID).Wait();
+                string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
+                _containerController.StopContainer(containerID).Wait();
 
-                Thread.Sleep(100);
-
-                var stopProps = _handler.GetBasicProperties("type");
-                var stopResponse = new BasicResponse { WorkerId = WorkerInfo.WorkerId };
-                _handler.SendMessage(JsonSerializer.Serialize(stopResponse), stopProps);
-                break;
-
-            case "ftpJob":
-                var ftpProps = _handler.GetBasicProperties("type");
-                var ftpJobInfo = JsonSerializer.Deserialize<JobRecoverDTO>(message);
-                Console.WriteLine("yes");
-                string ftp = "p1.servicehost:p1user:1234:bcc6c325-d254-4ae3-8606-7b18968e7412/9750304b-4fe7-434c-8089-34d42bee1023/source/testt.py";
-
-                string[] parts = ftp.Split(':');
-
-                foreach (string part in parts)
-                {
-                    Console.WriteLine(part);
-                }
-
-                var client = new FtpClient(parts[0], parts[1], parts[2]);
-                string res = "/p7/magnus.py";
-                client.AutoConnect();
-                client.UploadFile(res, @"bcc6c325-d254-4ae3-8606-7b18968e7412/9750304b-4fe7-434c-8089-34d42bee1023/result/magnus.py");
-                Console.WriteLine("sir");
+                _handler.SendMessage("Stopped", props);
                 break;
 
             default:
@@ -233,39 +225,22 @@ public class Worker
         WorkerInfo.ServerName = responseJson.ServerName;
         _handler.DeclareWorkerQueue();
         _handler.Connect();
-        _handler.AddWorkerConsumer(WorkerConsumer);
+        _handler.AddWorkerConsumer(WorkerConsumerAsync);
     }
 
-    void Downloadftpfile(string ftpLink, string downloadName)
+    void DownloadFTPfile(string remoteSourcePath)
     {
-        using (WebClient request = new WebClient())
-        {
-            //request.Credentials = new NetworkCredential("p1user", "1234");
-            byte[] filedata = request.DownloadData($"/p7/{ftpLink}");
+        string localSourcePath = Path.Combine(_storageDirectory, _payloadName);
 
-            using (FileStream file = File.Create(downloadName))
-            {
-                file.Write(filedata, 0, filedata.Length);
-                file.Close();
-            }
-            Console.WriteLine("Download Complete!");
-        }
-
-        File.Move($"{downloadName}", $"/{_storageDirectory}/storage");
+        _ftpClient.AutoConnect();
+        _ftpClient.DownloadFile(localSourcePath, remoteSourcePath);
     }
 
-    async Task PeriodicStillUpResponse(TimeSpan timeSpan, Action action, Action response)
+    void UploadFTPfile(string remoteResultPath)
     {
+        string localResultPath = Path.Combine(_storageDirectory, _resultName);
 
-        response();
-        action();
-
-        // var periodicTimer = new PeriodicTimer(timeSpan);
-        // do
-        // {
-        //     response();
-        //     action();
-        // }
-        // while (await periodicTimer.WaitForNextTickAsync());
+        _ftpClient.AutoConnect();
+        _ftpClient.UploadFile(localResultPath, Path.Combine(remoteResultPath, _resultName));
     }
 }

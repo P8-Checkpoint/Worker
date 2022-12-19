@@ -12,11 +12,13 @@ public class JobStartDTO
     public string FTPLink { get; set; }
     public string SourcePath { get; set; }
     public string ResultPath { get; set; }
-    public JobStartDTO(string jobId, string fTPLink, string sourcePath, string resultPath)
+    public string BackupPath { get; set; }
+    public JobStartDTO(string jobId, string fTPLink, string sourcePath, string resultPath, string backupPath)
     {
         JobId = jobId;
         FTPLink = fTPLink;
         SourcePath = sourcePath;
         ResultPath = resultPath;
+        BackupPath = backupPath;
     }
 }

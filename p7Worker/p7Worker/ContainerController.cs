@@ -13,8 +13,6 @@ public class ContainerController
     DockerClient client = new DockerClientConfiguration(
             new Uri("unix:///var/run/docker.sock")).CreateClient();
 
-    FileOperations fo = new FileOperations();
-
     string PathToContainers = $@"/var/lib/docker/containers/";
 
     public async Task CreateImageAsync(string imageName)
@@ -48,24 +46,12 @@ public class ContainerController
         Log.Information($"Loaded image: {imagePath}");
     }
 
-    public async Task CreateContainerAsync(string name, string image)
+    public async Task CreateContainerAsync(string containerName, string image, string payloadPath)
     {
-        // sudo docker create --name name --security-opt seccomp:unconfined image /bin/sh - c $"python3 /home/{payloadName}";
-        IList<string> args = new List<string>();
-        args.Append($"/bin/sh - c \"python3 /home/payload.py\"");
-
-        // await client.Containers.CreateContainerAsync(new CreateContainerParameters()
-        // {
-        //     Image = image,
-        //     Name = name,
-        //     Cmd = args
-        // },
-        // CancellationToken.None);
-
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"create --name {name} --security-opt seccomp:unconfined {image} /bin/sh - c \"python3 /home/payload.py\"";
+            process.StartInfo.Arguments = $"create --name {containerName} --security-opt seccomp:unconfined {image} /bin/sh - c \"python3 {payloadPath}\"";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -73,9 +59,9 @@ public class ContainerController
             process.WaitForExit();
         }
 
-        string id = await GetContainerIDByNameAsync(name);
+        string id = await GetContainerIDByNameAsync(containerName);
 
-        Log.Information($"Created Container, id: {id}, name: {name}");
+        Log.Information($"Created Container, id: {id}, name: {containerName}");
     }
 
     public async Task DeleteContainerAsync(string id)
@@ -138,70 +124,38 @@ public class ContainerController
 
     }
 
-    public async void Execute(string id, string payloadName, int interval)
-    {
-        var execTime = Stopwatch.StartNew();
+    // public async void Execute(string id, string payloadName, int interval)
+    // {
+    //     var execTime = Stopwatch.StartNew();
 
-        Log.Information($"Container is running: {id}. Checkpointing every {interval}ms");
+    //     Log.Information($"Container is running: {id}. Checkpointing every {interval}ms");
 
-        IList<string> args = new List<string>();
-        args.Add($"python {payloadName}");
-        await client.Exec.StartWithConfigContainerExecAsync(
-            id,
-            new ContainerExecStartParameters()
-            {
-                Cmd = args
-            },
-            CancellationToken.None
-        );
+    //     IList<string> args = new List<string>();
+    //     args.Add($"python {payloadName}");
+    //     await client.Exec.StartWithConfigContainerExecAsync(
+    //         id,
+    //         new ContainerExecStartParameters()
+    //         {
+    //             Cmd = args
+    //         },
+    //         CancellationToken.None
+    //     );
 
-        while (await ContainerIsRunningAsync(id) == true)
-        {
-            for (int i = 1; i > 0; i++)
-            {
-                string currentCheckpoint = $"checkpoint-{id}";
-                Checkpoint(id, currentCheckpoint);
-                Log.Information($"Made Checkpoint: {currentCheckpoint}");
+    //     while (await ContainerIsRunningAsync(id) == true)
+    //     {
+    //         for (int i = 1; i > 0; i++)
+    //         {
+    //             string currentCheckpoint = $"checkpoint-{id}";
+    //             Checkpoint(id, currentCheckpoint);
+    //             Log.Information($"Made Checkpoint: {currentCheckpoint}");
 
-                Thread.Sleep(interval);
-            }
-        }
+    //             Thread.Sleep(interval);
+    //         }
+    //     }
 
-        execTime.Stop();
-        Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
-    }
-
-    public async void ExecuteWithoutCheckpointing(string id, string payloadName)
-    {
-
-        Log.Information($"Container is running: {id} without checkpointing");
-        var execTime = Stopwatch.StartNew();
-
-        IList<string> args = new List<string>();
-        args.Add($"python .{payloadName}");
-        await client.Exec.StartWithConfigContainerExecAsync(
-            id,
-            new ContainerExecStartParameters()
-            {
-                Cmd = args
-            },
-            CancellationToken.None
-        );
-
-        // using (Process process = new Process())
-        // {
-        //     process.StartInfo.FileName = "docker";
-        //     process.StartInfo.Arguments = $"exec {id} .{payloadName}.py";
-        //     process.StartInfo.UseShellExecute = false;
-        //     process.StartInfo.RedirectStandardOutput = true;
-        //     process.Start();
-        //     string output = process.StandardOutput.ReadToEnd();
-        //     process.WaitForExit();
-        // }
-
-        execTime.Stop();
-        Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
-    }
+    //     execTime.Stop();
+    //     Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
+    // }
 
     public async void Checkpoint(string id, string checkpointName)
     {
@@ -217,17 +171,17 @@ public class ContainerController
             process.WaitForExit();
         }
 
-        Log.Information($"Stopped container: {id}");
+        Log.Information($"Checkpointed container: {id}");
     }
 
     public async Task RestoreAsync(
         string id,
         string checkpointName,
         string containerName,
-        string payload,
+        string payloadPath,
         string image)
     {
-        await CreateContainerAsync(containerName, image);
+        await CreateContainerAsync(containerName, image, payloadPath);
 
         using (Process process = new Process())
         {

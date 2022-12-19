@@ -10,8 +10,12 @@ namespace p7Worker;
 
 public class FileOperations
 {
+    public FileOperations(string pathToHome)
+    {
+        this.pathToHome = pathToHome;
+    }
     string pathToContainers = $@"/var/lib/docker/containers";
-    string pathToHome = "/p7";
+    string pathToHome { get; set; }
 
     public void MovePayloadIntoContainer(string payloadName, string containerID)
     {
@@ -31,12 +35,12 @@ public class FileOperations
 
     public void ExtractResultFromContainer(string resultName, string containerID)
     {
-        string resultDestination = System.IO.Path.Combine(pathToHome, "result");
+        string resultDestination = System.IO.Path.Combine(pathToHome, resultName);
 
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"cp {containerID}:./*.worker {resultDestination}";
+            process.StartInfo.Arguments = $"cp {containerID}:./{resultName} {resultDestination}";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -45,7 +49,7 @@ public class FileOperations
         }
     }
 
-    public void MoveCheckpointFromContainer(string checkpoint, string containerID)
+    public void MoveCheckpointFromContainer(string checkpointName, string containerID)
     {
         string pathToCheckpoints = $@"/{pathToContainers}/{containerID}/checkpoints";
 
@@ -60,8 +64,8 @@ public class FileOperations
             process.WaitForExit();
         }
 
-        string sourceFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
-        string destFile = System.IO.Path.Combine(pathToHome, checkpoint);
+        string sourceFile = System.IO.Path.Combine(pathToCheckpoints, checkpointName);
+        string destFile = System.IO.Path.Combine(pathToHome, checkpointName);
 
         System.IO.File.Copy(sourceFile, destFile, true);
     }
