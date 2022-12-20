@@ -14,7 +14,7 @@ internal class Program
     static void Main(string[] args)
     {
         var _handler = new RabbitMQHandler();
-        var worker = new Worker(_handler);
+        var worker = new Worker(_handler, new ContainerController(), new FileOperations("/p7"));
 
         try
         {

@@ -30,7 +30,7 @@ public class ContainerController
         Log.Information($"Created image: {imageName}");
     }
 
-    public async Task LoadImageAsync(string imagePath)
+    public void LoadImage(string imagePath)
     {
         using (Process process = new Process())
         {
@@ -97,7 +97,7 @@ public class ContainerController
             return containerID;
         }
 
-        return "";
+        return string.Empty;
     }
 
     public async Task StartAsync(string id)
@@ -159,7 +159,6 @@ public class ContainerController
 
     public void Checkpoint(string name, string checkpointName)
     {
-
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
@@ -174,19 +173,13 @@ public class ContainerController
         Log.Information($"Checkpointed container: {name}");
     }
 
-    public async Task RestoreAsync(
-        string id,
-        string checkpointName,
-        string containerName,
-        string payloadPath,
-        string image)
+    public async Task RestoreAsync(string checkpointName, string containerName)
     {
-        await CreateContainerAsync(containerName, image, payloadPath);
 
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"start {containerName} --checkpoint {checkpointName}";
+            process.StartInfo.Arguments = $"start --checkpoint {checkpointName} {containerName}";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
@@ -194,7 +187,7 @@ public class ContainerController
             process.WaitForExit();
         }
 
-        Log.Information($"Restored container, id: {id}, checkpoint: {checkpointName}");
+        Log.Information($"Restored container, name: {containerName}, checkpoint: {checkpointName}");
     }
 
     public async Task<bool> ContainerIsRunningAsync(string id)
@@ -203,14 +196,40 @@ public class ContainerController
             new ContainersListParameters()
         );
 
-        foreach (var container in containers)
+        var container = ContainerInList(containers, id);
+
+        if (IsContainerUp(container))
         {
-            if (container.ID == id && container.Status.StartsWith("Up"))
-            {
-                return true;
-            }
+            return true;
         }
 
         return false;
+    }
+
+    public bool IsContainerUp(ContainerListResponse container)
+    {
+        if (container == null)
+        {
+            return false;
+        }
+        if (container.Status.StartsWith("Up"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public ContainerListResponse ContainerInList(IList<ContainerListResponse> list, string id)
+    {
+        foreach (var container in list)
+        {
+            if (container.ID == id)
+            {
+                return container;
+            }
+        }
+
+        return null;
     }
 }
