@@ -67,7 +67,7 @@ public class FileOperations
         string sourceFile = Path.Combine(pathToCheckpoints, checkpointName);
         string destFile = Path.Combine(pathToHome, checkpointName);
 
-        Directory.Move($@"/var/lib/docker/containers/{containerID}/checkpoints/{checkpointName}", $@"/p7/{checkpointName}");
+        Directory.Move($@"/{pathToContainers}/{containerID}/checkpoints/{checkpointName}", $@"/p7/{checkpointName}");
     }
 
     public void MoveAllCheckpointsFromContainer(string containerID)
