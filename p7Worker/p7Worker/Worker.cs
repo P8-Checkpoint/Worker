@@ -91,20 +91,34 @@ public class Worker
         int i = 0;
         while (running)
         {
-            string checkpointNamei = _checkpointName + i.ToString();
-            _containerController.Checkpoint(_containerName, _checkpointName + i.ToString());
+            try
+            {
+                string checkpointNamei = _checkpointName + i.ToString();
+                _containerController.Checkpoint(_containerName, _checkpointName + i.ToString());
 
-            _fileOperations.MoveCheckpointFromContainer(checkpointNamei, containerID);
-            // _ftpClient.UploadFile(Path.Combine(_storageDirectory, _checkpointName), remoteBackupPath);
-            Console.Write("\nUploaded checkpoint\n");
-            Thread.Sleep(_checkpointFrequency);
-            i++;
-            running = _containerController.ContainerIsRunningAsync(containerID).Result;
+                _fileOperations.MoveCheckpointFromContainer(checkpointNamei, containerID);
+
+                _ftpClient.UploadDirectory(Path.Combine(_storageDirectory, checkpointNamei), $"{remoteBackupPath}{checkpointNamei}");
+                Console.Write("\nUploaded checkpoint\n");
+
+                Thread.Sleep(_checkpointFrequency);
+                i++;
+
+                running = _containerController.ContainerIsRunningAsync(containerID).Result;
+
+                Console.WriteLine("\nRunning = " + _containerController.ContainerIsRunningAsync(containerID).Result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                break;
+            }
         }
 
         totalTime.Stop();
-        Log.Logger.Information($"Elapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
+        Log.Logger.Information($"\nElapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
 
+        Console.WriteLine($"\nExtracting result with name {_resultName} from container {containerID}");
         _fileOperations.ExtractResultFromContainer(_resultName, containerID);
 
         await _containerController.DeleteContainerAsync(containerID);
@@ -154,53 +168,53 @@ public class Worker
             return;
         }
 
-        var props = _handler.GetBasicProperties("type");
 
         switch (Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]))
         {
             case "startJob":
+                Console.WriteLine("\nStarted Job\n");
                 var startJobInfo = JsonSerializer.Deserialize<JobStartDTO>(message);
-                _handler.SendMessage(JsonSerializer.Serialize(startJobInfo), props);
+                _handler.SendMessage(startJobInfo.Id.ToString(), _handler.GetBasicProperties("startJob"));
 
-                string[] parts = startJobInfo.FTPLink.Split(':');
+                string[] parts = startJobInfo.SourcePath.Split(':');
                 _payloadName = startJobInfo.SourcePath.Split('/').Last();
+                Console.WriteLine("\nSet PayloadName");
 
-                Console.WriteLine("Set PayloadName");
-                _payloadName = "20seconds.py";
+                Console.WriteLine("\nPayloadName: " + _payloadName);
+                Console.WriteLine("\nResultPath: " + $"{startJobInfo.ResultPath.Split(":").Last()}{_resultName}");
+                Console.WriteLine("\nBackupPath: " + $"{startJobInfo.BackupPath.Split(":").Last()}{_checkpointName}");
 
-                // _ftpClient = new FtpClient(parts[0], parts[1], parts[2]);
-                // _ftpClient.AutoConnect();
-                // DownloadFTPfile(startJobInfo.SourcePath);
-                Console.WriteLine("Downloaded source");
+                _ftpClient = new FtpClient(parts[0], parts[1], parts[2]);
+                _ftpClient.Connect();
+                DownloadFTPfile(parts[3]);
+                Console.WriteLine("\nDownloaded source");
 
-                Console.WriteLine("Running Container True");
                 _runningContainer = true;
-                // CreateAndExecuteContainerAsync(startJobInfo.BackupPath);
 
                 var task = Task.Run(() =>
                 {
-                    Console.WriteLine("\n\nCreating Container");
-                    CreateAndExecuteContainerAsync("/p7/backup/checkpoint");
-                    Console.WriteLine("\n\nDone creating and running");
+                    Console.WriteLine("\nCreating Container");
+                    CreateAndExecuteContainerAsync(startJobInfo.BackupPath.Split(":").Last());
+                    Console.WriteLine("\nDone creating and running");
 
                     while (_runningContainer)
                     {
-                        Console.WriteLine("\n\nResponse sent");
+                        Console.WriteLine("\nResponse sent");
                         Thread.Sleep(_responseFrequency);
-                        // WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(startJobInfo.JobId));
-                        // _handler.SendMessage(JsonSerializer.Serialize(workerReport), props);
-                        Console.WriteLine("\n\nContainer is running outer:" + _runningContainer);
+                        WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfo.WorkerId, Guid.Parse(startJobInfo.Id.ToString()));
+                        _handler.SendMessage(JsonSerializer.Serialize(workerReport), _handler.GetBasicProperties("report"));
                     }
                 });
 
                 Task.WaitAll(task);
 
-                Console.WriteLine("Done Running Container");
+                Console.WriteLine("\nDone Running Container");
 
-                // UploadFTPfile(startJobInfo.ResultPath);
-                Console.WriteLine("Uploaded result");
-                _handler.SendMessage(JsonSerializer.Serialize(startJobInfo), props);
-                Console.WriteLine("Done UWU");
+                Console.WriteLine("\nUploading :" + $"{startJobInfo.ResultPath.Split(":").Last()}{_resultName}");
+                UploadFTPfile($"{startJobInfo.ResultPath.Split(":").Last()}{_resultName}");
+                Console.WriteLine("\nUploaded result");
+                Console.WriteLine("\nDone with job");
+                _handler.SendMessage(startJobInfo.Id.ToString(), _handler.GetBasicProperties("jobDone"));
                 break;
 
             // case "recoverJob":
@@ -264,6 +278,6 @@ public class Worker
     {
         string localResultPath = Path.Combine(_storageDirectory, _resultName);
 
-        _ftpClient.UploadFile(localResultPath, Path.Combine(remoteResultPath, _resultName));
+        _ftpClient.UploadFile(localResultPath, remoteResultPath);
     }
 }

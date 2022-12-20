@@ -23,7 +23,8 @@ public class RabbitMQHandler
 
     void Init()
     {
-        var factory = new ConnectionFactory() { HostName = "localhost" };
+        // var factory = new ConnectionFactory() { HostName = "localhost" };
+        var factory = new ConnectionFactory() { UserName = "rabbit2", Password = "rabbit2", HostName = "rabbit2.rabbitmq" };
         var connection = factory.CreateConnection();
         _channel = connection.CreateModel();
     }

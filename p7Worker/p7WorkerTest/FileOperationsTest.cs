@@ -26,6 +26,9 @@ public class FileOperationsTest
     }
     public void PredFileTest()
     {
-
+        var fo = new FileOperations("/p7");
+        string filePath = "/p7/predTest.py";
+        var file = File.Create(filePath);
+        file.Close();
     }
 }

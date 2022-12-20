@@ -27,6 +27,7 @@ internal class Program
         {
             Log.Error(ex, "Something went wrong");
             var props = _handler.GetBasicProperties("type");
+            Console.WriteLine(ex);
             _handler.SendMessage($"Status: Failed on error: {ex}", props);
         }
         finally

@@ -8,15 +8,13 @@ namespace p7Worker.DTOs;
 
 public class JobStartDTO
 {
-    public string JobId { get; set; }
-    public string FTPLink { get; set; }
+    public Guid Id { get; set; }
     public string SourcePath { get; set; }
     public string ResultPath { get; set; }
     public string BackupPath { get; set; }
-    public JobStartDTO(string jobId, string fTPLink, string sourcePath, string resultPath, string backupPath)
+    public JobStartDTO(Guid id, string sourcePath, string resultPath, string backupPath)
     {
-        JobId = jobId;
-        FTPLink = fTPLink;
+        Id = id;
         SourcePath = sourcePath;
         ResultPath = resultPath;
         BackupPath = backupPath;
