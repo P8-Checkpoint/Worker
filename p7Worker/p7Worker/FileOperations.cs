@@ -10,13 +10,16 @@ namespace p7Worker;
 
 public class FileOperations
 {
-
+    public FileOperations(string pathToHome)
+    {
+        this.pathToHome = pathToHome;
+    }
     string pathToContainers = $@"/var/lib/docker/containers";
-    string pathToHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    string pathToHome { get; set; }
 
     public void MovePayloadIntoContainer(string payloadName, string containerID)
     {
-        string payload = System.IO.Path.Combine(pathToHome, payloadName);
+        string payload = Path.Combine(pathToHome, payloadName);
 
         using (Process process = new Process())
         {
@@ -32,7 +35,7 @@ public class FileOperations
 
     public void ExtractResultFromContainer(string resultName, string containerID)
     {
-        string resultDestination = System.IO.Path.Combine(pathToHome, resultName);
+        string resultDestination = Path.Combine(pathToHome, resultName);
 
         using (Process process = new Process())
         {
@@ -46,7 +49,7 @@ public class FileOperations
         }
     }
 
-    public void MoveCheckpointFromContainer(string checkpoint, string containerID)
+    public void MoveCheckpointFromContainer(string checkpointName, string containerID)
     {
         string pathToCheckpoints = $@"/{pathToContainers}/{containerID}/checkpoints";
 
@@ -61,10 +64,10 @@ public class FileOperations
             process.WaitForExit();
         }
 
-        string sourceFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
-        string destFile = System.IO.Path.Combine(pathToHome, checkpoint);
+        string sourceFile = Path.Combine(pathToCheckpoints, checkpointName);
+        string destFile = Path.Combine(pathToHome, checkpointName);
 
-        System.IO.File.Copy(sourceFile, destFile, true);
+        Directory.Move($@"/{pathToContainers}/{containerID}/checkpoints/{checkpointName}", $@"/p7/{checkpointName}");
     }
 
     public void MoveAllCheckpointsFromContainer(string containerID)
@@ -92,6 +95,7 @@ public class FileOperations
 
     public void MoveCheckpointIntoContainer(string checkpoint, string containerID)
     {
+        string pathToRecoveryCheckpoint = $@"{pathToHome}/storage/{checkpoint}";
         string pathToCheckpoints = $@"/{pathToContainers}/{containerID}/checkpoints";
 
         using (Process process = new Process())
@@ -108,6 +112,18 @@ public class FileOperations
         string sourceFile = System.IO.Path.Combine(pathToHome, checkpoint);
         string destFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
 
-        System.IO.File.Copy(sourceFile, destFile, true);
+        File.Copy(sourceFile, destFile, true);
+    }
+
+    public void PredFile(string filePath)
+    {
+        // Add a line to the beginning of the file
+        string startLine = "import sys \n \nf = open(\"worker.result\", \"w\") \nsys.stdout = f";
+        string currentContent = File.ReadAllText(filePath);
+        File.WriteAllText(filePath, startLine + Environment.NewLine + currentContent);
+
+        // Add a line to the end of the file
+        string endLine = "sys.stdout = sys.__stdout__ \nf.close()";
+        File.AppendAllText(filePath, Environment.NewLine + endLine);
     }
 }

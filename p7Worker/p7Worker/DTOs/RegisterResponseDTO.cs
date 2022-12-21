@@ -8,12 +8,12 @@ namespace p7Worker.DTOs;
 
 public class RegisterResponseDTO
 {
-  public string WorkerId { get; set; }
-  public string ServerName { get; set; }
+    public string WorkerId { get; set; }
+    public string ServerName { get; set; }
 
-  public RegisterResponseDTO(string workerId, string serverName)
-  {
-     WorkerId = workerId;
-     ServerName = serverName;
-  }
+    public RegisterResponseDTO(string workerId, string serverName)
+    {
+        WorkerId = workerId;
+        ServerName = serverName;
+    }
 }
