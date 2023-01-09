@@ -61,67 +61,67 @@ public class Worker
         _handler.Register(RegisterResponseRecieved);
     }
 
-    // public async Task CreateAndExecuteContainerAsync(string remoteBackupPath)
-    // {
-    //     Log.Logger = new LoggerConfiguration()
-    //         .MinimumLevel.Debug()
-    //         .WriteTo.Console()
-    //         .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
-    //         .CreateLogger();
+    public async Task CreateAndExecuteContainerAsync(string remoteBackupPath)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Console()
+            .WriteTo.File($"logs/p7-{WorkerInfo.WorkerId}-log.txt", rollingInterval: RollingInterval.Day)
+            .CreateLogger();
 
-    //     Log.Information($"Hello, {Environment.UserName}!");
+        Log.Information($"Hello, {Environment.UserName}!");
 
-    //     // Create a container
-    //     await _containerController.CreateContainerAsync(_containerName, _imageName, _payloadName);
+        // Create a container
+        await _containerController.CreateContainerAsync(_containerName, _imageName, _payloadName);
 
-    //     // Log total elapsed time per run
-    //     var totalTime = Stopwatch.StartNew();
+        // Log total elapsed time per run
+        var totalTime = Stopwatch.StartNew();
 
-    //     // Start Container
-    //     string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
+        // Start Container
+        string containerID = _containerController.GetContainerIDByNameAsync(_containerName).Result;
 
-    //     _fileOperations.PredFile(Path.Combine(_storageDirectory, _payloadName));
-    //     _fileOperations.MovePayloadIntoContainer(_payloadName, _containerName);
+        _fileOperations.PredFile(Path.Combine(_storageDirectory, _payloadName));
+        _fileOperations.MovePayloadIntoContainer(_payloadName, _containerName);
 
-    //     await _containerController.StartAsync(containerID);
+        await _containerController.StartAsync(containerID);
 
-    //     bool running = _containerController.ContainerIsRunningAsync(containerID).Result;
-    //     int i = 0;
-    //     while (running)
-    //     {
-    //         try
-    //         {
-    //             string checkpointNamei = _checkpointName + i.ToString();
-    //             _containerController.Checkpoint(_containerName, _checkpointName + i.ToString());
+        bool running = _containerController.ContainerIsRunningAsync(containerID).Result;
+        int i = 0;
+        while (running)
+        {
+            try
+            {
+                string checkpointNamei = _checkpointName + i.ToString();
+                _containerController.Checkpoint(_containerName, _checkpointName + i.ToString());
 
-    //             _fileOperations.MoveCheckpointFromContainer(checkpointNamei, containerID);
+                _fileOperations.MoveCheckpointFromContainer(checkpointNamei, containerID);
 
-    //             _ftpClient.UploadDirectory(Path.Combine(_storageDirectory, checkpointNamei), $"{remoteBackupPath}{checkpointNamei}");
-    //             Console.Write("\nUploaded checkpoint\n");
+                _ftpClient.UploadDirectory(Path.Combine(_storageDirectory, checkpointNamei), $"{remoteBackupPath}{checkpointNamei}");
+                Console.Write("\nUploaded checkpoint\n");
 
-    //             Thread.Sleep(_checkpointFrequency);
-    //             i++;
+                Thread.Sleep(_checkpointFrequency);
+                i++;
 
-    //             running = _containerController.ContainerIsRunningAsync(containerID).Result;
-    //             Console.WriteLine("\nRunning = " + _containerController.ContainerIsRunningAsync(containerID).Result);
-    //         }
-    //         catch (Exception ex)
-    //         {
-    //             Console.WriteLine(ex);
-    //             break;
-    //         }
-    //     }
+                running = _containerController.ContainerIsRunningAsync(containerID).Result;
+                Console.WriteLine("\nRunning = " + _containerController.ContainerIsRunningAsync(containerID).Result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                break;
+            }
+        }
 
-    //     totalTime.Stop();
-    //     Log.Logger.Information($"\nElapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
+        totalTime.Stop();
+        Log.Logger.Information($"\nElapsed total time for run {"test"} with payload {_payloadName}: {totalTime.ElapsedMilliseconds}ms");
 
-    //     Console.WriteLine($"\nExtracting result with name {_resultName} from container {containerID}");
-    //     _fileOperations.ExtractResultFromContainer(_resultName, containerID);
+        Console.WriteLine($"\nExtracting result with name {_resultName} from container {containerID}");
+        _fileOperations.ExtractResultFromContainer(_resultName, containerID);
 
-    //     await _containerController.DeleteContainerAsync(containerID);
+        await _containerController.DeleteContainerAsync(containerID);
 
-    //     _runningContainer = false;
-    // }
+        _runningContainer = false;
+    }
 
     public async Task StartOrRecoverContainerAsync(string remoteBackupPath, string startRecover)
     {
@@ -211,7 +211,6 @@ public class Worker
         {
             return;
         }
-
 
         switch (Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]))
         {
@@ -329,6 +328,8 @@ public class Worker
         _handler.DeclareWorkerQueue();
         _handler.Connect();
         _handler.AddWorkerConsumer(WorkerConsumer);
+
+        RunInBackground(TimeSpan.FromSeconds(5), () => _handler.SendMessage(JsonSerializer.Serialize(responseJson), _handler.GetBasicProperties("report")));
     }
 
     void DownloadFTPFile(string remoteSourcePath)
@@ -343,5 +344,14 @@ public class Worker
         string localResultPath = Path.Combine(_storageDirectory, _resultName);
 
         _ftpClient.UploadFile(localResultPath, remoteResultPath);
+    }
+
+    async Task RunInBackground(TimeSpan timeSpan, Action action)
+    {
+        var periodicTimer = new PeriodicTimer(timeSpan);
+        while (await periodicTimer.WaitForNextTickAsync())
+        {
+            action();
+        }
     }
 }
