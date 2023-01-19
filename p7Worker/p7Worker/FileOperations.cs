@@ -67,6 +67,11 @@ public class FileOperations
         string sourceFile = Path.Combine(pathToCheckpoints, checkpointName);
         string destFile = Path.Combine(pathToHome, checkpointName);
 
+        if (Directory.Exists($@"/p7/{checkpointName}"))
+        {
+            Directory.Delete($@"/p7/{checkpointName}", true);
+        }
+
         Directory.Move($@"/{pathToContainers}/{containerID}/checkpoints/{checkpointName}", $@"/p7/{checkpointName}");
     }
 
