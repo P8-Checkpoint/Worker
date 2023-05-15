@@ -22,7 +22,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <ProjectReference Include="../p7Worker/p7Worker.csproj" />
+    <ProjectReference Include="../p8Worker/p8Worker.csproj" />
   </ItemGroup>
 
 </Project>
