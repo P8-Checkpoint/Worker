@@ -10,12 +10,12 @@ public class RegisterResponseDTO
 {
     public string WorkerId { get; set; }
     public string ServerName { get; set; }
-    public string LANId { get; set; }
+    public string LANIp { get; set; }
 
-    public RegisterResponseDTO(string workerId, string serverName, string lanId)
+    public RegisterResponseDTO(string workerId, string serverName, string lanIp)
     {
         WorkerId = workerId;
         ServerName = serverName;
-        LANId = lanId;
+        LANIp = lanIp;
     }
 }

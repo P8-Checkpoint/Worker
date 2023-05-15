@@ -228,7 +228,7 @@ public class Worker
                     else
                         _logger.Information($"Still alive, state: {Enum.GetName(typeof(State), _workerState)}");
                     _keepAliveDt = DateTime.UtcNow;
-                    WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfoDto.WorkerId, _ServiceTask != null ? _ServiceTask.Id : Guid.Empty, GetLANId());
+                    WorkerReportDTO workerReport = new WorkerReportDTO(WorkerInfoDto.WorkerId, _ServiceTask != null ? _ServiceTask.Id : Guid.Empty, GetLANIp());
                     _handler.SendMessage(JsonSerializer.Serialize(workerReport), _handler.GetBasicProperties("report"));
                 }
             }
@@ -445,16 +445,16 @@ public class Worker
         _ftpClient.UploadFile(localResultPath, remoteResultPath);
     }
 
-    string GetLANId()
+    string GetLANIp()
     {
         var host = Dns.GetHostEntry(Dns.GetHostName());
         foreach (var ip in host.AddressList)
         {
-            if (ip.AddressFamily == AddressFamily.InterNetwork)
+            if (ip.ToString().Split('.')[0] == "192")
             {
                 return ip.ToString();
             }
         }
-        return "No LANId";
+        return "No LANIp";
     }
 }
