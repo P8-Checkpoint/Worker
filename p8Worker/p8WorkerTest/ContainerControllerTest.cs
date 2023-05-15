@@ -15,18 +15,18 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using System.Text;
 using System.Threading;
-using p7Worker;
+using p8Worker.ContainerHandling.Logic;
 
-namespace p7WorkerTest;
+namespace p8WorkerTest;
 
 public class ContainerControllerTests
 {
 
-    ContainerController _sut;
+    LinuxContainerController _sut;
 
     public ContainerControllerTests()
     {
-        _sut = new ContainerController();
+        _sut = new LinuxContainerController();
     }
 
     [Fact]

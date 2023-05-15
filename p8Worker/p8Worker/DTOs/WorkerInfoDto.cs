@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace p7Worker;
+namespace p8Worker.DTOs;
 
-public static class WorkerInfo
+public static class WorkerInfoDto
 {
     public static string WorkerId { get; set; } = string.Empty;
     public static string ServerName { get; set; } = string.Empty;

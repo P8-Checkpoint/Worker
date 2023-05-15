@@ -1,4 +1,4 @@
-namespace p7WorkerTest;
+namespace p8WorkerTest;
 
 public class SanityCheck
 {

@@ -5,10 +5,11 @@ using System.Diagnostics;
 using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using p8Worker.ContainerHandling.Interfaces;
 
-namespace p7Worker;
+namespace p8Worker.ContainerHandling.Logic;
 
-public class ContainerController
+public class LinuxContainerController : IContainerHandler
 {
     DockerClient client = new DockerClientConfiguration(
             new Uri("unix:///var/run/docker.sock")).CreateClient();
@@ -30,23 +31,7 @@ public class ContainerController
         Log.Information($"Created image: {imageName}");
     }
 
-    public void LoadImage(string imagePath)
-    {
-        using (Process process = new Process())
-        {
-            process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"load -i {imagePath}";
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.RedirectStandardOutput = true;
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-        }
-
-        Log.Information($"Loaded image: {imagePath}");
-    }
-
-    public async Task CreateContainerAsync(string containerName, string image, string payloadName)
+    public async Task<string> CreateContainerAsync(string containerName, string image, string payloadName)
     {
         using (Process process = new Process())
         {
@@ -62,6 +47,7 @@ public class ContainerController
         string id = await GetContainerIDByNameAsync(containerName);
 
         Log.Information($"Created Container, id: {id}, name: {containerName}");
+        return id;
     }
 
     public async Task DeleteContainerAsync(string id)
@@ -79,28 +65,35 @@ public class ContainerController
 
     public async Task<string> GetContainerIDByNameAsync(string containerName)
     {
-        IList<ContainerListResponse> containers = await client.Containers.ListContainersAsync(
+        try
+        {
+            IList<ContainerListResponse> containers = await client.Containers.ListContainersAsync(
             new ContainersListParameters()
             {
                 Limit = 10,
             },
             CancellationToken.None);
 
-        string containerID;
+            string containerID;
 
-        foreach (var container in containers)
+            foreach (var container in containers)
+            {
+                containerID = container.ID;
+
+                Log.Information($"Container {containerName} has id: \n{containerID}");
+
+                return containerID;
+            }
+        }
+        catch (AggregateException ex)
         {
-            containerID = container.ID;
 
-            Log.Information($"Container {containerName} has id: \n{containerID}");
-
-            return containerID;
         }
 
         return string.Empty;
     }
 
-    public async Task StartAsync(string id)
+    public async Task Start(string id)
     {
         await client.Containers.StartContainerAsync(
             id,
@@ -112,70 +105,76 @@ public class ContainerController
 
     public async Task StopContainer(string id)
     {
-        await client.Containers.StopContainerAsync(
+        try
+        {
+            await client.Containers.KillContainerAsync(
             id,
-            new ContainerStopParameters
-            {
-                WaitBeforeKillSeconds = 30
-            },
-            CancellationToken.None);
+                new ContainerKillParameters(),
+                CancellationToken.None
+            );
+        }
+        catch (Exception ex) { }
 
         Log.Information($"Stopped container: {id}");
 
     }
 
-    // public async void Execute(string id, string payloadName, int interval)
-    // {
-    //     var execTime = Stopwatch.StartNew();
 
-    //     Log.Information($"Container is running: {id}. Checkpointing every {interval}ms");
-
-    //     IList<string> args = new List<string>();
-    //     args.Add($"python {payloadName}");
-    //     await client.Exec.StartWithConfigContainerExecAsync(
-    //         id,
-    //         new ContainerExecStartParameters()
-    //         {
-    //             Cmd = args
-    //         },
-    //         CancellationToken.None
-    //     );
-
-    //     while (await ContainerIsRunningAsync(id) == true)
-    //     {
-    //         for (int i = 1; i > 0; i++)
-    //         {
-    //             string currentCheckpoint = $"checkpoint-{id}";
-    //             Checkpoint(id, currentCheckpoint);
-    //             Log.Information($"Made Checkpoint: {currentCheckpoint}");
-
-    //             Thread.Sleep(interval);
-    //         }
-    //     }
-
-    //     execTime.Stop();
-    //     Log.Logger.Information($"Elapsed time for execution {payloadName}: {execTime.ElapsedMilliseconds}ms");
-    // }
-
-    public void Checkpoint(string name, string checkpointName)
+    public async void PruneContainers()
     {
+        IList<ContainerListResponse> containers = await client.Containers.ListContainersAsync(
+        new ContainersListParameters()
+        {
+            Limit = 10,
+        },
+        CancellationToken.None);
+
+        foreach (var item in containers)
+        {
+            try
+            {
+                if (item.State != "exited")
+                {
+                    await client.Containers.KillContainerAsync(
+                    item.ID,
+                    new ContainerKillParameters(),
+                    CancellationToken.None
+                );
+                }
+            }
+            catch (Exception ex) { }
+        }
+
+        var result = client.Containers.PruneContainersAsync().Result;
+
+        Log.Information("Pruned Containers");
+    }
+
+    public bool Checkpoint(string name, string checkpointName)
+    {
+
+        Log.Information($"Checkpointing container: {name}");
+        string output = string.Empty;
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
-            process.StartInfo.Arguments = $"checkpoint create --leave-running {name} {checkpointName}";
+            process.StartInfo.Arguments = $"checkpoint create {name} {checkpointName}";
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
-            string output = process.StandardOutput.ReadToEnd();
+            output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
         }
+        output = output.Replace("\n", "");
+        Log.Information($"Checkpointed container: {output}");
 
-        Log.Information($"Checkpointed container: {name}");
+        return output == checkpointName && Restore(checkpointName, name) ? true : false;
     }
 
-    public async Task RestoreAsync(string checkpointName, string containerName)
+    public bool Restore(string checkpointName, string containerName)
     {
-
+        Log.Information($"Restore container: {containerName}, {checkpointName}");
+        string output = string.Empty;
         using (Process process = new Process())
         {
             process.StartInfo.FileName = "docker";
@@ -183,11 +182,27 @@ public class ContainerController
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.RedirectStandardOutput = true;
             process.Start();
-            string output = process.StandardOutput.ReadToEnd();
+            output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
         }
 
-        Log.Information($"Restored container, name: {containerName}, checkpoint: {checkpointName}");
+        Log.Information($"Restore process done: {output}");
+        bool retval = output == string.Empty ? true : false;
+
+        var id = GetContainerIDByNameAsync(containerName).Result;
+        if (id != null && retval)
+        {
+            Log.Information($"Waiting for container to start: {id}");
+            retval = ContainerIsRunningAsync(id).Result;
+        }
+        else
+        {
+            Log.Information($"Failed to start container: {id}");
+            retval = false;
+        }
+
+        Log.Information($"Restored container, name: {containerName}, checkpoint: {checkpointName}, value: {retval}");
+        return retval;
     }
 
     public async Task<bool> ContainerIsRunningAsync(string id)

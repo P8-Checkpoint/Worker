@@ -6,13 +6,15 @@ using Serilog;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
-namespace p7Worker;
+namespace p8Worker.Filehandler;
 
-public class FileOperations
+public class FileOperationsLinux : IFileOperation
 {
-    public FileOperations(string pathToHome)
+    ILogger _logger;
+    public FileOperationsLinux(string pathToHome, ILogger logger)
     {
         this.pathToHome = pathToHome;
+        _logger = logger;
     }
     string pathToContainers = $@"/var/lib/docker/containers";
     string pathToHome { get; set; }
@@ -114,21 +116,22 @@ public class FileOperations
             process.WaitForExit();
         }
 
-        string sourceFile = System.IO.Path.Combine(pathToHome, checkpoint);
-        string destFile = System.IO.Path.Combine(pathToCheckpoints, checkpoint);
-
-        File.Copy(sourceFile, destFile, true);
+        string sourceFile = Path.Combine(pathToHome, checkpoint);
+        string destFile = Path.Combine(pathToCheckpoints, checkpoint);
+        _logger.Information($"source: {sourceFile}, dest: {destFile}");
+        //File.Copy(sourceFile, destFile, true
+        Directory.Move(sourceFile, destFile);
     }
 
     public void PredFile(string filePath)
     {
-        // Add a line to the beginning of the file
-        string startLine = "import sys \n \nf = open(\"worker.result\", \"w\") \nsys.stdout = f";
-        string currentContent = File.ReadAllText(filePath);
-        File.WriteAllText(filePath, startLine + Environment.NewLine + currentContent);
+        //// Add a line to the beginning of the file
+        //string startLine = "import sys \n \nf = open(\"worker.result\", \"w\") \nsys.stdout = f";
+        //string currentContent = File.ReadAllText(filePath);
+        //File.WriteAllText(filePath, startLine + Environment.NewLine + currentContent);
 
-        // Add a line to the end of the file
-        string endLine = "sys.stdout = sys.__stdout__ \nf.close()";
-        File.AppendAllText(filePath, Environment.NewLine + endLine);
+        //// Add a line to the end of the file
+        //string endLine = "sys.stdout = sys.__stdout__ \nf.close()";
+        //File.AppendAllText(filePath, Environment.NewLine + endLine);
     }
 }

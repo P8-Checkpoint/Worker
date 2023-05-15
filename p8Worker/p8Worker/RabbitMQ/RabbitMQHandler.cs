@@ -1,6 +1,8 @@
-﻿using p7Worker.DTOs;
+﻿using Docker.DotNet.Models;
+using p8Worker.DTOs;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,29 +10,43 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace p7Worker;
+namespace p8Worker.RabbitMQ;
 
 public class RabbitMQHandler
 {
+    ILogger _logger;
     IModel _channel;
     string _replyConsumerTag;
     string _workerQueueName;
 
-    public RabbitMQHandler()
+    public RabbitMQHandler(ILogger logger)
     {
-        Init();
+        _logger = logger;
     }
+    public bool IsConnected { get { return _channel == null ? false : _channel.IsOpen; } }
 
-    void Init()
+    void ConnectToServer()
     {
-        // var factory = new ConnectionFactory() { HostName = "localhost" };
-        var factory = new ConnectionFactory() { UserName = "rabbit2", Password = "rabbit2", HostName = "rabbit2.rabbitmq" };
+        var factory = new ConnectionFactory() { HostName = "192.168.1.10", UserName = "admin", Password = "admin" };
         var connection = factory.CreateConnection();
         _channel = connection.CreateModel();
     }
 
     public void Register(EventHandler<BasicDeliverEventArgs> remoteProcedure)
     {
+        if (!IsConnected)
+        {
+            try
+            {
+                ConnectToServer();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex.ToString());
+                return;
+            }
+        }
+
         var replyQueueName = _channel.QueueDeclare(autoDelete: true, exclusive: true).QueueName;
 
         var consumer = new EventingBasicConsumer(_channel);
@@ -49,25 +65,25 @@ public class RabbitMQHandler
         props.CorrelationId = correlationId;
         props.ReplyTo = replyQueueName;
 
-        var workerId = WorkerInfo.WorkerId;
+        var workerId = WorkerInfoDto.WorkerId;
         var messageBytes = Encoding.UTF8.GetBytes($"{workerId}");
 
         _channel.BasicPublish(exchange: "server", routingKey: "workerRegister", basicProperties: props, body: messageBytes);
 
-        Console.WriteLine("Registration sent to server");
+        _logger.Information("Registration sent to server");
     }
 
     public void DeclareWorkerQueue()
     {
-        _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfo.WorkerId, autoDelete: false, exclusive: false);
-        _channel.QueueBind(_workerQueueName, "worker", WorkerInfo.WorkerId);
+        _workerQueueName = _channel.QueueDeclare("worker_" + WorkerInfoDto.WorkerId, autoDelete: false, exclusive: false);
+        _channel.QueueBind(_workerQueueName, "worker", WorkerInfoDto.WorkerId);
     }
 
     public void Connect()
     {
-        var messageBytes = Encoding.UTF8.GetBytes(WorkerInfo.WorkerId);
-        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.workerConnect", body: messageBytes);
-        Console.WriteLine("Connected to server {}. You can now freely send messages!");
+        var messageBytes = Encoding.UTF8.GetBytes(WorkerInfoDto.WorkerId);
+        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfoDto.ServerName}.workerConnect", body: messageBytes);
+        _logger.Information("Connected to server {}. You can now freely send messages!");
         _channel.BasicCancel(_replyConsumerTag);
     }
 
@@ -87,7 +103,7 @@ public class RabbitMQHandler
     {
         var messageBytes = Encoding.UTF8.GetBytes(message);
 
-        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfo.ServerName}.{WorkerInfo.WorkerId}", basicProperties: props, body: messageBytes);
+        _channel.BasicPublish(exchange: "server", routingKey: $"{WorkerInfoDto.ServerName}.{WorkerInfoDto.WorkerId}", basicProperties: props, body: messageBytes);
     }
 
     public IBasicProperties GetBasicProperties(string type)

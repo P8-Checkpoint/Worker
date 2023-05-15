@@ -3,22 +3,27 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.2.32630.192
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "p7Worker", "p7Worker\p7Worker.csproj", "{DCA04DDC-B3D4-4934-90E2-2854370FB300}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "p8Worker", "p8Worker\p8Worker.csproj", "{DCA04DDC-B3D4-4934-90E2-2854370FB300}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "p7WorkerTest", "p7WorkerTest\p7WorkerTest.csproj", "{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "p8WorkerTest", "p8WorkerTest\p8WorkerTest.csproj", "{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		DebugLocal|Any CPU = DebugLocal|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.DebugLocal|Any CPU.ActiveCfg = DebugLocal|Any CPU
+		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.DebugLocal|Any CPU.Build.0 = DebugLocal|Any CPU
 		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DCA04DDC-B3D4-4934-90E2-2854370FB300}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.DebugLocal|Any CPU.ActiveCfg = DebugLocal|Any CPU
+		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.DebugLocal|Any CPU.Build.0 = DebugLocal|Any CPU
 		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CF4A47E5-8441-4D15-886E-A10A3E5D7B8A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
