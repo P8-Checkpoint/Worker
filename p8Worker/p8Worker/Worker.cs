@@ -437,7 +437,13 @@ public class Worker
     {
         string localSourcePath = Path.Combine(_storageDirectory, localFileName);
 
-        _ftpClient.DownloadDirectory(localSourcePath, "//" + remoteSourcePath);
+        _ftpClient.DownloadDirectory(_storageDirectory, remoteSourcePath);
+
+        var split = remoteSourcePath.Split("/");
+
+        var path = $"{_storageDirectory}/home/ftpuser/{split[0]}/{split[1]}/{split[2]}/{split[3]}";
+        Directory.Move(path, localSourcePath);
+
     }
 
     void UploadFTPfile(string remoteResultPath)
