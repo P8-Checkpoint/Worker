@@ -194,7 +194,8 @@ public class Worker
                 await _containerController.StopContainer(_containerID);
                 _logger.Information("Stopped");
                 _handler.SendMessage(_ServiceTask.Id.ToString(), _handler.GetBasicProperties("stopJob"));
-                _ftpClient.DeleteDirectory(_ServiceTask.SourcePath.Split(":").Last().Split("/")[1]);
+                var val = _ServiceTask.ResultPath.Split(":").Last().Split("/");
+                _ftpClient.DeleteDirectory($"{val[0]}/{val[1]}");
                 await InitForNewTask();
                 _serviceTaskCfg = null;
                 _ServiceTask = null;
