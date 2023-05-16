@@ -10,13 +10,13 @@ namespace p8Worker.DTOs
     {
         public string WorkerId { get; set; }
         public Guid JobId { get; set; }
-        public string LANId { get; set; }
+        public string LANIp { get; set; }
 
-        public WorkerReportDTO(string workerId, Guid jobId, string lANId)
+        public WorkerReportDTO(string workerId, Guid jobId, string lANIp)
         {
             WorkerId = workerId;
             JobId = jobId;
-            LANId = lANId;
+            LANIp = lANIp;
         }
     }
 }
