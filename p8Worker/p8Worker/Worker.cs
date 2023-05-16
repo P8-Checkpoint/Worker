@@ -97,7 +97,7 @@ public class Worker
     bool _igonrebackend = false;
     void DummyRun()
     {
-        if(_runDummy)
+        if (_runDummy)
         {
             _logger.Information("Starting dummy task!");
             _ServiceTask = new ServiceTaskDto(Guid.Parse("ec85dd75-3f2b-4273-8735-121d71747a57"),
@@ -167,7 +167,7 @@ public class Worker
                         _minimunKeepAlive = DateTime.UtcNow;
                     }
                 }
-                else if(DateTime.UtcNow - _minimunKeepAlive > TimeSpan.FromSeconds(10))
+                else if (DateTime.UtcNow - _minimunKeepAlive > TimeSpan.FromSeconds(10))
                 {
                     _workerState = State.Finished;
                     _serviceTaskSw.Stop();
@@ -194,6 +194,7 @@ public class Worker
                 await _containerController.StopContainer(_containerID);
                 _logger.Information("Stopped");
                 _handler.SendMessage(_ServiceTask.Id.ToString(), _handler.GetBasicProperties("stopJob"));
+                _ftpClient.DeleteDirectory(_ServiceTask.SourcePath.Split(":").Last().Split("/")[1]);
                 await InitForNewTask();
                 _serviceTaskCfg = null;
                 _ServiceTask = null;
@@ -216,7 +217,7 @@ public class Worker
 
     void KeepAlive()
     {
-        while(true)
+        while (true)
         {
             if (_handler.IsConnected)
             {
@@ -334,7 +335,7 @@ public class Worker
         if (startRecover)
         {
             _logger.Information($"Starting from checkpoint: {_checkpointName}, Container name: {_containerName}");
-            if(!_containerController.Restore(_checkpointName, _containerName))
+            if (!_containerController.Restore(_checkpointName, _containerName))
             {
                 _logger.Information($"Failed to start checkpoint! shutting down!");
                 Thread.Sleep(1000);
@@ -362,7 +363,7 @@ public class Worker
         {
             return;
         }
-        if(!_igonrebackend)
+        if (!_igonrebackend)
         {
             double d = 0;
             string msgType = Encoding.UTF8.GetString((byte[])ea.BasicProperties.Headers["type"]);
@@ -435,7 +436,7 @@ public class Worker
     {
         string localSourcePath = Path.Combine(_storageDirectory, localFileName);
 
-        _ftpClient.DownloadDirectory(localSourcePath, "//"+remoteSourcePath);
+        _ftpClient.DownloadDirectory(localSourcePath, "//" + remoteSourcePath);
     }
 
     void UploadFTPfile(string remoteResultPath)
